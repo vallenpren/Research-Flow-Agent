@@ -209,122 +209,126 @@ const App: React.FC = () => {
     recognition.start();
   };
 
-  // --- EXPORT TO ACCOUNTING EXCEL (.XLSX) WITH DASHBOARD ---
+  // --- EXPORT TO PREMIUM DASHBOARD EXCEL (MATCHING DESIGN) ---
   const exportToExcel = async () => {
-    // 0. CAPTURE THE LIVE CHART IMAGE
-    let chartImage = null;
-    if (chartRef.current) {
-        try {
-            const canvas = await html2canvas(chartRef.current, { 
-              backgroundColor: '#111827', // matching our dark theme
-              scale: 2, // higher quality
-              logging: false,
-              useCORS: true
-            });
-            chartImage = canvas.toDataURL('image/png');
-        } catch (e) {
-            console.error("Chart capture failed", e);
-        }
-    }
-
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Financial_Dashboard');
+    const worksheet = workbook.addWorksheet('FINANCE_DASHBOARD');
 
-    // Setup Columns
-    worksheet.columns = [
-      { key: 'no', width: 6 },
-      { key: 'date', width: 14 },
-      { key: 'desc', width: 28 },
-      { key: 'type', width: 10 },
-      { key: 'amt', width: 15 },
-      { key: 'spacer', width: 4 }, // Spacer for chart
-      { key: 'chartContent', width: 50 }, // Placeholder for chart area
-    ];
+    // 0. GLOBALS & COLUMN WIDTHS
+    // We use a custom grid to simulate the app layout
+    worksheet.getColumn(1).width = 18; // Sidebar
+    worksheet.getColumn(2).width = 5;  // Gap
+    worksheet.getColumn(3).width = 15; // Date
+    worksheet.getColumn(4).width = 30; // Desc
+    worksheet.getColumn(5).width = 15; // Detail
+    worksheet.getColumn(6).width = 12; // Nominal
+    worksheet.getColumn(7).width = 12; // Achievement
+    worksheet.getColumn(8).width = 10; // Indicator
 
-    // 1. BANNER HEADER
-    worksheet.mergeCells('A1:G2');
-    const banner = worksheet.getCell('A1');
-    banner.value = 'RESEARCHFLOW PRO - DYNAMIC FINANCIAL DASHBOARD';
-    banner.font = { name: 'Segoe UI', bold: true, size: 18, color: { argb: 'FFFFFFFF' } };
-    banner.alignment = { vertical: 'middle', horizontal: 'center' };
-    banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } };
-
-    // 2. KPI CARDS
-    worksheet.mergeCells('A4:E4');
-    const cardTitle = worksheet.getCell('A4');
-    cardTitle.value = `FINANCIAL OVERVIEW: ${new Date().toLocaleDateString('id-ID')}`;
-    cardTitle.font = { bold: true, size: 12 };
-
-    // KPI Blocks
-    worksheet.mergeCells('A5:B6');
-    const cardInc = worksheet.getCell('A5');
-    cardInc.value = `INCOME\nRp ${totalIn.toLocaleString('id-ID')}`;
-    cardInc.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cardInc.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    cardInc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
-
-    worksheet.mergeCells('C5:D6');
-    const cardExp = worksheet.getCell('C5');
-    cardExp.value = `EXPENSE\nRp ${totalOut.toLocaleString('id-ID')}`;
-    cardExp.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cardExp.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    cardExp.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF43F5E' } };
-
-    worksheet.mergeCells('E5:E6');
-    const cardBal = worksheet.getCell('E5');
-    cardBal.value = `NET BALANCE\nRp ${(totalIn - totalOut).toLocaleString('id-ID')}`;
-    cardBal.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cardBal.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    cardBal.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
-
-    // 3. ADD CHART IMAGE
-    if (chartImage) {
-        const imageId = workbook.addImage({
-            base64: chartImage,
-            extension: 'png',
-        });
-        worksheet.addImage(imageId, {
-            tl: { col: 6.2, row: 3.5 }, // Start at Column G
-            ext: { width: 520, height: 260 }
-        });
+    // 1. SIDEBAR (BLACK BACKGROUND)
+    for(let i=1; i<=100; i++) {
+        const cell = worksheet.getCell(`A${i}`);
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF18181B' } };
     }
+    
+    // Sidebar Labels
+    const menuItems = [
+        { row: 2, label: 'MONEYFLOW', isBold: true, size: 14 },
+        { row: 8, label: '🏠 HOME' },
+        { row: 12, label: '💸 EXPENSES' },
+        { row: 16, label: '💰 INCOME' },
+        { row: 20, label: '📊 REPORT' }
+    ];
+    menuItems.forEach(item => {
+        const cell = worksheet.getCell(`A${item.row}`);
+        cell.value = item.label;
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: item.isBold || false, size: item.size || 10 };
+        cell.alignment = { horizontal: 'center' };
+    });
 
-    // 4. DATA TABLE
-    const startRow = 9;
-    const headerRow = worksheet.getRow(startRow);
-    headerRow.values = ["NO", "DATE", "DESCRIPTION", "ACTIVITY", "AMOUNT", "", "VISUAL ANALYSIS (REAL-TIME TREND)"];
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    // 2. TOP BANNER (YELLOW)
+    worksheet.mergeCells('B1:H1');
+    const header = worksheet.getCell('B1');
+    header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBFF00' } };
+
+    // 3. MAIN TITLE
+    worksheet.mergeCells('C3:E4');
+    const mainTitle = worksheet.getCell('C3');
+    mainTitle.value = 'FINANCIAL REPORT';
+    mainTitle.font = { bold: true, size: 24, name: 'Impact' };
+    mainTitle.alignment = { vertical: 'middle' };
+
+    // 4. SUMMARY DASHBOARD (INCOME ACTUAL VS BUDGET)
+    // Simulated Achievement
+    const budgetVal = totalIn * 1.1; // Demo: Budget is 110% of Income
+    const achievement = (totalIn / budgetVal) * 100;
+
+    worksheet.mergeCells('C6:D9');
+    const donutMock = worksheet.getCell('C6');
+    donutMock.value = `${achievement.toFixed(0)}%\nINCOME`;
+    donutMock.font = { size: 18, bold: true, color: { argb: 'FF0D9488' } };
+    donutMock.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    donutMock.border = { top: {style:'thick'}, left: {style:'thick'}, bottom: {style:'thick'}, right: {style:'thick'} };
+
+    // Details next to "Chart"
+    worksheet.getCell('E6').value = 'INCOME ACTUAL :';
+    worksheet.getCell('F6').value = totalIn;
+    worksheet.getCell('F6').numFmt = '#,##0';
+    
+    worksheet.getCell('E7').value = 'INCOME BUDGET :';
+    worksheet.getCell('F7').value = budgetVal;
+    worksheet.getCell('F7').numFmt = '#,##0';
+
+    worksheet.getCell('E8').value = 'REALISASI (%) :';
+    worksheet.getCell('F8').value = achievement / 100;
+    worksheet.getCell('F8').numFmt = '0%';
+
+    // 5. DATA TABLE
+    const tableHeaderRow = 12;
+    const headers = ["No", "Tanggal", "Keterangan", "Aksi", "Nominal", "Budget %", "Status"];
+    const headerRow = worksheet.getRow(tableHeaderRow);
+    headerRow.values = ["", "", ...headers]; // Offset for sidebar
+    
     headerRow.eachCell((cell, i) => {
-      if (i <= 5) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-      }
-    });
-
-    const sortedTx = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
-    sortedTx.forEach((tx, idx) => {
-      const r = worksheet.addRow([idx + 1, tx.date, tx.description, tx.type.toUpperCase(), tx.amount]);
-      r.getCell(5).numFmt = '#,##0';
-      r.eachCell((cell, i) => {
-        if (i <= 5) {
-          cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-          if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-          if (i === 4) cell.font = { bold: true, color: { argb: tx.type === 'income' ? 'FF059669' : 'FFBE123C' } };
+        if (i >= 3) {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+            cell.border = { bottom: {style:'medium'}, top: {style:'thin'} };
+            cell.alignment = { horizontal: 'center' };
         }
-      });
     });
 
-    // 5. FOOTER
-    const footerIdx = worksheet.lastRow ? worksheet.lastRow.number + 2 : 15;
-    worksheet.mergeCells(`A${footerIdx}:G${footerIdx}`);
-    const footCell = worksheet.getCell(`A${footerIdx}`);
-    footCell.value = 'MoneyFlow Research Agent - Smart Financial Visualizer v3.5';
-    footCell.font = { italic: true, size: 10, color: { argb: 'FF94A3B8' } };
-    footCell.alignment = { horizontal: 'center' };
+    const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+    sorted.forEach((tx, idx) => {
+        const rowIdx = tableHeaderRow + 1 + idx;
+        const currentBudget = tx.amount * 1.1; // Mock internal budget per item
+        const status = tx.type === 'income' ? '🟢' : '🔴';
+        
+        worksheet.getRow(rowIdx).values = [
+            "", "", // Gap
+            idx + 1,
+            tx.date,
+            tx.description,
+            tx.type.toUpperCase(),
+            tx.amount,
+            "100%",
+            status
+        ];
+        
+        const row = worksheet.getRow(rowIdx);
+        row.getCell(7).numFmt = '#,##0';
+        row.eachCell((cell, i) => {
+            if (i >= 3) {
+                cell.border = { bottom: {style:'thin'}, left: {style:'thin'}, right: {style:'thin'} };
+                if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+            }
+        });
+    });
 
+    // 6. GENERATE AND SAVE
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `ResearchFlow_Dashboard_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    saveAs(blob, `MoneyFlow_App_Style_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
