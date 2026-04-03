@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import html2canvas from 'html2canvas';
 import { 
   Wallet,
   Mic,
@@ -22,7 +23,10 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 
 // --- TS MODELS ---
@@ -112,10 +116,12 @@ const App: React.FC = () => {
   const [mType, setMType] = useState<'income' | 'expense'>('expense');
   const [mAmt, setMAmt] = useState('');
 
-  // Refs for auto-focus navigation
+  // Refs for auto-focus navigation and chart capture
   const descRef = useRef<HTMLInputElement>(null);
   const typeRef = useRef<HTMLSelectElement>(null);
   const amtRef = useRef<HTMLInputElement>(null);
+  const barChartRef = useRef<HTMLDivElement>(null);
+  const donutChartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     localStorage.setItem('moneyflow_data', JSON.stringify(transactions));
@@ -211,125 +217,99 @@ const App: React.FC = () => {
     recognition.start();
   };
 
-  // --- EXPORT TO PREMIUM DASHBOARD EXCEL (MATCHING DESIGN) ---
+  // --- EXPORT TO PREMIUM CHART-DASHBOARD EXCEL ---
   const exportToExcel = async () => {
+    // 0. CAPTURE CHARTS AS IMAGES
+    const capture = async (ref: React.RefObject<HTMLDivElement | null>) => {
+      if (!ref.current) return null;
+      try {
+        const canvas = await html2canvas(ref.current, { 
+          backgroundColor: '#1e293b', 
+          scale: 2,
+          logging: false,
+          useCORS: true 
+        });
+        return canvas.toDataURL('image/png');
+      } catch (e) { return null; }
+    };
+
+    const barImg = await capture(barChartRef);
+    const donutImg = await capture(donutChartRef);
+
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('FINANCE_DASHBOARD');
+    const worksheet = workbook.addWorksheet('FINANCE_REPORT');
 
-    // 0. GLOBALS & COLUMN WIDTHS
-    // We use a custom grid to simulate the app layout
-    worksheet.getColumn(1).width = 18; // Sidebar
-    worksheet.getColumn(2).width = 5;  // Gap
-    worksheet.getColumn(3).width = 15; // Date
-    worksheet.getColumn(4).width = 30; // Desc
-    worksheet.getColumn(5).width = 15; // Detail
-    worksheet.getColumn(6).width = 12; // Nominal
-    worksheet.getColumn(7).width = 12; // Achievement
-    worksheet.getColumn(8).width = 10; // Indicator
-
-    // 1. SIDEBAR (BLACK BACKGROUND)
-    for(let i=1; i<=100; i++) {
-        const cell = worksheet.getCell(`A${i}`);
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF18181B' } };
-    }
-    
-    // Sidebar Labels
-    const menuItems = [
-        { row: 2, label: 'MONEYFLOW', isBold: true, size: 14 },
-        { row: 8, label: '🏠 HOME' },
-        { row: 12, label: '💸 EXPENSES' },
-        { row: 16, label: '💰 INCOME' },
-        { row: 20, label: '📊 REPORT' }
+    // 1. COLUMN SETUP (CLEANER - NO SIDEBAR)
+    worksheet.columns = [
+      { key: 'no', width: 6 },
+      { key: 'date', width: 14 },
+      { key: 'desc', width: 32 },
+      { key: 'type', width: 12 },
+      { key: 'amt', width: 18 },
+      { key: 'pct', width: 12 },
+      { key: 'stat', width: 10 },
     ];
-    menuItems.forEach(item => {
-        const cell = worksheet.getCell(`A${item.row}`);
-        cell.value = item.label;
-        cell.font = { color: { argb: 'FFFFFFFF' }, bold: item.isBold || false, size: item.size || 10 };
-        cell.alignment = { horizontal: 'center' };
-    });
 
-    // 2. TOP BANNER (YELLOW)
-    worksheet.mergeCells('B1:H1');
-    const header = worksheet.getCell('B1');
+    // 2. HEADER BANNER (YELLOW)
+    worksheet.mergeCells('A1:G1');
+    const header = worksheet.getCell('A1');
     header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBFF00' } };
 
-    // 3. MAIN TITLE
-    worksheet.mergeCells('C3:E4');
-    const mainTitle = worksheet.getCell('C3');
-    mainTitle.value = 'FINANCIAL REPORT';
-    mainTitle.font = { bold: true, size: 24, name: 'Impact' };
-    mainTitle.alignment = { vertical: 'middle' };
+    // 3. TITLE
+    worksheet.mergeCells('A3:G4');
+    const title = worksheet.getCell('A3');
+    title.value = 'MONTHLY FINANCIAL VISUALIZATION REPORT';
+    title.font = { bold: true, size: 20, name: 'Impact' };
+    title.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    // 4. SUMMARY DASHBOARD (INCOME ACTUAL VS BUDGET)
-    // Simulated Achievement
-    const budgetVal = totalIn * 1.1; // Demo: Budget is 110% of Income
-    const achievement = (totalIn / budgetVal) * 100;
+    // 4. EMBED CHARTS (ROUND & BAR)
+    if (donutImg) {
+      const id = workbook.addImage({ base64: donutImg, extension: 'png' });
+      worksheet.addImage(id, {
+        tl: { col: 0.5, row: 5 },
+        ext: { width: 350, height: 260 }
+      });
+    }
 
-    worksheet.mergeCells('C6:D9');
-    const donutMock = worksheet.getCell('C6');
-    donutMock.value = `${achievement.toFixed(0)}%\nINCOME`;
-    donutMock.font = { size: 18, bold: true, color: { argb: 'FF0D9488' } };
-    donutMock.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    donutMock.border = { top: {style:'thick'}, left: {style:'thick'}, bottom: {style:'thick'}, right: {style:'thick'} };
+    if (barImg) {
+      const id = workbook.addImage({ base64: barImg, extension: 'png' });
+      worksheet.addImage(id, {
+        tl: { col: 4, row: 5 },
+        ext: { width: 350, height: 260 }
+      });
+    }
 
-    // Details next to "Chart"
-    worksheet.getCell('E6').value = 'INCOME ACTUAL :';
-    worksheet.getCell('F6').value = totalIn;
-    worksheet.getCell('F6').numFmt = '#,##0';
-    
-    worksheet.getCell('E7').value = 'INCOME BUDGET :';
-    worksheet.getCell('F7').value = budgetVal;
-    worksheet.getCell('F7').numFmt = '#,##0';
-
-    worksheet.getCell('E8').value = 'REALISASI (%) :';
-    worksheet.getCell('F8').value = achievement / 100;
-    worksheet.getCell('F8').numFmt = '0%';
-
-    // 5. DATA TABLE
-    const tableHeaderRow = 12;
-    const headers = ["No", "Tanggal", "Keterangan", "Aksi", "Nominal", "Budget %", "Status"];
-    const headerRow = worksheet.getRow(tableHeaderRow);
-    headerRow.values = ["", "", ...headers]; // Offset for sidebar
-    
-    headerRow.eachCell((cell, i) => {
-        if (i >= 3) {
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
-            cell.border = { bottom: {style:'medium'}, top: {style:'thin'} };
-            cell.alignment = { horizontal: 'center' };
-        }
+    // 5. TABLE CONTENT (MOVED DOWN)
+    const tableRow = 18;
+    const labels = ["No", "Tanggal", "Keterangan", "Aksi", "Nominal", "Actual %", "Status"];
+    const hRow = worksheet.getRow(tableRow);
+    hRow.values = labels;
+    hRow.eachCell(c => {
+      c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+      c.alignment = { horizontal: 'center' };
     });
 
     const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
     sorted.forEach((tx, idx) => {
-        const rowIdx = tableHeaderRow + 1 + idx;
-        const status = tx.type === 'income' ? '🟢' : '🔴';
-        
-        worksheet.getRow(rowIdx).values = [
-            "", "", // Gap
-            idx + 1,
-            tx.date,
-            tx.description,
-            tx.type.toUpperCase(),
-            tx.amount,
-            "100%",
-            status
-        ];
-        
-        const row = worksheet.getRow(rowIdx);
-        row.getCell(7).numFmt = '#,##0';
-        row.eachCell((cell, i) => {
-            if (i >= 3) {
-                cell.border = { bottom: {style:'thin'}, left: {style:'thin'}, right: {style:'thin'} };
-                if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-            }
-        });
+      const row = worksheet.addRow([
+        idx + 1,
+        tx.date,
+        tx.description,
+        tx.type.toUpperCase(),
+        tx.amount,
+        "100%",
+        tx.type === 'income' ? '🟢' : '🔴'
+      ]);
+      row.getCell(5).numFmt = '#,##0';
+      row.eachCell(c => {
+        c.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      });
     });
 
-    // 6. GENERATE AND SAVE
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `MoneyFlow_App_Style_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    saveAs(blob, `Visual_Financial_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const groupedByDate = transactions.reduce((acc: any, tx) => {
@@ -421,20 +401,41 @@ const App: React.FC = () => {
 
       {transactions.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
-          <div className="glass-card">
-             <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><BarChart3 size={18} /> {t.chart_title}</h4>
-             <div style={{ height: '280px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={historyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                    <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={10} axisLine={false} tickLine={false} />
-                    <YAxis stroke="var(--text-muted)" fontSize={10} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: '#1e293b', border: 'none', borderRadius: '1rem', color: 'white' }} />
-                    <Bar name={t.inc} dataKey="in" fill="var(--secondary)" radius={[4, 4, 0, 0]} />
-                    <Bar name={t.exp} dataKey="out" fill="var(--accent)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+             
+             {/* DIAGRAM BULAT (DONUT) */}
+             <div className="glass-card">
+                <h4 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Zap size={18} /> Percentage Analysis</h4>
+                <div ref={donutChartRef} style={{ height: '280px' }}>
+                   <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                         <Pie data={[{ name: 'In', value: totalIn }, { name: 'Out', value: totalOut }]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                            <Cell fill="var(--secondary)" />
+                            <Cell fill="var(--accent)" />
+                         </Pie>
+                         <Tooltip />
+                      </PieChart>
+                   </ResponsiveContainer>
+                </div>
              </div>
+
+             {/* DIAGRAM BATANG */}
+             <div className="glass-card">
+                <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><BarChart3 size={18} /> {t.chart_title}</h4>
+                <div ref={barChartRef} style={{ height: '280px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={historyData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={10} axisLine={false} tickLine={false} />
+                        <YAxis stroke="var(--text-muted)" fontSize={10} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={{ background: '#1e293b', border: 'none', borderRadius: '1rem', color: 'white' }} />
+                        <Bar name={t.inc} dataKey="in" fill="var(--secondary)" radius={[4, 4, 0, 0]} />
+                        <Bar name={t.exp} dataKey="out" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                </div>
+             </div>
+
           </div>
 
           <div className="glass-card" style={{ padding: '2rem' }}>
