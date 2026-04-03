@@ -6,7 +6,6 @@ import {
   TrendingDown,
   TrendingUp,
   History,
-  Languages,
   Trash2,
   BarChart3,
   Download
