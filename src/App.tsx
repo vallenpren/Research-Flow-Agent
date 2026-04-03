@@ -136,15 +136,19 @@ const App: React.FC = () => {
     const incWords = ['gaji', 'masuk', 'pemasukan', 'income', 'tambah', 'bonus', 'received', 'untung'];
     if (incWords.some(w => lower.includes(w))) type = 'income';
 
-    // 4. Extract Description
+    // 4. Extract Description (Enhanced)
     let description = input
-      .replace(/(\d+[\d,.]*)[\s.]*(rb|ribu|k|000|juta|jt|million|m)?/i, '')
-      .replace(/tanggal\s+\d+|date\s+\d+/gi, '')
-      .replace(new RegExp(Object.keys(monthsMap).join('|'), 'gi'), '')
-      .replace(/pemasukan|pengeluaran|income|expense|masuk|keluar/gi, '')
+      .replace(/(\d+[\d,.]*)[\s.]*(rb|ribu|k|000|juta|jt|million|m)?/i, '') // Remove amount
+      .replace(/tanggal\s+\d+|date\s+\d+|bulan|month/gi, '') // Remove date/month keywords
+      .replace(new RegExp(Object.keys(monthsMap).join('|'), 'gi'), '') // Remove actual month names
+      .replace(/pemasukan|pengeluaran|income|expense|masuk|keluar/gi, '') // Remove types
+      .replace(/\s(dengan keterangan|dengan|keterangan|untuk|buat|for|about|rekap|catat)\s/gi, ' ') // Remove noise words
+      .replace(/\s+/g, ' ') // Cleanup extra spaces
       .trim();
 
-    if (!description) description = type === 'income' ? 'Pemasukan' : 'Pengeluaran';
+    if (!description || description.length < 2) {
+      description = type === 'income' ? 'Pemasukan' : 'Pengeluaran';
+    }
 
     if (amount > 0) {
       const newTx: Transaction = {
