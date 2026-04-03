@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { 
   Wallet,
   Mic,
@@ -68,7 +70,7 @@ const translations = {
     bal: "Sisa Saldo",
     chart_title: "Tren Keuangan (Harian)",
     btn_clear: "Reset Data",
-    btn_export: "Unduh Excel (.csv)",
+    btn_export: "Unduh Excel (.xlsx)",
     table_in: "Tabel Pemasukan",
     table_out: "Tabel Pengeluaran",
     table_hist: "Tabel Riwayat Saldo",
@@ -179,39 +181,101 @@ const App: React.FC = () => {
     recognition.start();
   };
 
-  // --- EXPORT TO ACCOUNTING CSV ---
-  const exportToCSV = () => {
-    const headers = ["DATE", "DESCRIPTION", "TYPE", "INCOME (DR)", "EXPENSE (CR)", "REMAINING BALANCE"];
-    let running = 0;
-    
-    const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
-    const rows = sorted.map(tx => {
-      const inc = tx.type === 'income' ? tx.amount : 0;
-      const exp = tx.type === 'expense' ? tx.amount : 0;
-      running += (inc - exp);
-      return [tx.date, tx.description, tx.type.toUpperCase(), inc, exp, running];
+  // --- EXPORT TO ACCOUNTING EXCEL (.XLSX) ---
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Finance_Report');
+
+    // Setup Columns
+    worksheet.columns = [
+      { key: 'no', width: 6 },
+      { key: 'date', width: 14 },
+      { key: 'desc', width: 32 },
+      { key: 'type', width: 12 },
+      { key: 'amt', width: 18 },
+    ];
+
+    // 1. BANNER HEADER
+    worksheet.mergeCells('A1:E2');
+    const banner = worksheet.getCell('A1');
+    banner.value = 'MONEYFLOW PRO ACCOUNTING - FINANCIAL DASHBOARD';
+    banner.font = { name: 'Segoe UI', bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+    banner.alignment = { vertical: 'middle', horizontal: 'center' };
+    banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } }; // primary: #8b5cf6
+
+    // 2. KPI CARDS (DASHBOARD STYLE)
+    // Card Title Label
+    worksheet.mergeCells('A4:E4');
+    const cardTitle = worksheet.getCell('A4');
+    cardTitle.value = `FINANCIAL PERFORMANCE OVERVIEW (${new Date().toLocaleDateString('id-ID')})`;
+    cardTitle.font = { bold: true, size: 11, color: { argb: 'FF1E293B' } };
+
+    // KPI: INCOME
+    worksheet.mergeCells('A5:B6');
+    const cardInc = worksheet.getCell('A5');
+    cardInc.value = `TOTAL INCOME\nRp ${totalIn.toLocaleString('id-ID')}`;
+    cardInc.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    cardInc.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cardInc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } }; // Secondary: #10b981
+
+    // KPI: EXPENSE
+    worksheet.mergeCells('C5:D6');
+    const cardExp = worksheet.getCell('C5');
+    cardExp.value = `TOTAL EXPENSE\nRp ${totalOut.toLocaleString('id-ID')}`;
+    cardExp.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    cardExp.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cardExp.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF43F5E' } }; // Accent: #f43f5e
+
+    // KPI: BALANCE
+    worksheet.mergeCells('E5:E6');
+    const cardBal = worksheet.getCell('E5');
+    cardBal.value = `REMAINING\nRp ${(totalIn - totalOut).toLocaleString('id-ID')}`;
+    cardBal.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    cardBal.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cardBal.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } }; // Info blue
+
+    // 3. ANALYSIS TABLE HEADER
+    const headerRow = worksheet.getRow(8);
+    headerRow.values = ["NO", "DATE", "DESCRIPTION", "ACTIVITY", "AMOUNT (RP)"];
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.alignment = { horizontal: 'center' };
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
     });
 
-    const totalInc = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const totalExp = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    // 4. DATA ROWS
+    const sortedTx = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+    sortedTx.forEach((tx, idx) => {
+      const r = worksheet.addRow([
+        idx + 1,
+        tx.date,
+        tx.description,
+        tx.type.toUpperCase(),
+        tx.amount
+      ]);
+      r.getCell(5).numFmt = '#,##0';
+      r.eachCell((cell, i) => {
+        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+        if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+        if (i === 4) { // Activity color
+           cell.font = { bold: true, color: { argb: tx.type === 'income' ? 'FF059669' : 'FFBE123C' } };
+        }
+      });
+    });
 
-    const summaryRows = [
-      [],
-      ["SUMMARY REPORT"],
-      ["Total Income", totalInc],
-      ["Total Expense", totalExp],
-      ["Final Net Balance", totalInc - totalExp]
-    ];
-    
-    let csvContent = "data:text/csv;charset=utf-8," 
-      + headers.join(",") + "\n" 
-      + rows.map(e => e.join(",")).join("\n") + "\n"
-      + summaryRows.map(e => e.join(",")).join("\n");
+    // 5. SUMMARY FOOTER
+    const footerIdx = worksheet.lastRow ? worksheet.lastRow.number + 2 : 12;
+    worksheet.mergeCells(`A${footerIdx}:E${footerIdx}`);
+    const footCell = worksheet.getCell(`A${footerIdx}`);
+    footCell.value = 'Data Generated via MoneyFlow AI Agent - Research-Flow Edition';
+    footCell.font = { italic: true, size: 10, color: { argb: 'FF94A3B8' } };
+    footCell.alignment = { horizontal: 'center' };
 
-    const link = document.createElement("a");
-    link.href = encodeURI(csvContent);
-    link.download = `Accounting_Report_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
+    // GENERATE AND SAVE
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `ResearchFlow_Financial_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
@@ -233,7 +297,7 @@ const App: React.FC = () => {
            <h2 style={{ fontSize: '1.4rem' }}>{t.title} <span style={{ color: 'var(--primary)', fontWeight: '400' }}>{t.agent}</span></h2>
         </div>
         <div style={{ display: 'flex', gap: '0.6rem' }}>
-          <button className="glass-card" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid rgba(16, 185, 129, 0.2)' }} onClick={exportToCSV}>
+          <button className="glass-card" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid rgba(16, 185, 129, 0.2)' }} onClick={exportToExcel}>
             <Download size={16} /> {t.btn_export}
           </button>
           <button className="glass-card" style={{ width: '40px', height: '40px', borderRadius: '50%', color: 'var(--primary)', fontWeight: 'bold' }} onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>{lang.toUpperCase()}</button>
