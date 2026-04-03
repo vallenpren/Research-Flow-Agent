@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import html2canvas from 'html2canvas';
 import { 
   Wallet,
   Mic,
@@ -108,10 +109,11 @@ const App: React.FC = () => {
   const [mType, setMType] = useState<'income' | 'expense'>('expense');
   const [mAmt, setMAmt] = useState('');
 
-  // Refs for auto-focus navigation
+  // Refs for auto-focus navigation and chart capture
   const descRef = useRef<HTMLInputElement>(null);
   const typeRef = useRef<HTMLSelectElement>(null);
   const amtRef = useRef<HTMLInputElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     localStorage.setItem('moneyflow_data', JSON.stringify(transactions));
@@ -181,101 +183,122 @@ const App: React.FC = () => {
     recognition.start();
   };
 
-  // --- EXPORT TO ACCOUNTING EXCEL (.XLSX) ---
+  // --- EXPORT TO ACCOUNTING EXCEL (.XLSX) WITH DASHBOARD ---
   const exportToExcel = async () => {
+    // 0. CAPTURE THE LIVE CHART IMAGE
+    let chartImage = null;
+    if (chartRef.current) {
+        try {
+            const canvas = await html2canvas(chartRef.current, { 
+              backgroundColor: '#111827', // matching our dark theme
+              scale: 2, // higher quality
+              logging: false,
+              useCORS: true
+            });
+            chartImage = canvas.toDataURL('image/png');
+        } catch (e) {
+            console.error("Chart capture failed", e);
+        }
+    }
+
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Finance_Report');
+    const worksheet = workbook.addWorksheet('Financial_Dashboard');
 
     // Setup Columns
     worksheet.columns = [
       { key: 'no', width: 6 },
       { key: 'date', width: 14 },
-      { key: 'desc', width: 32 },
-      { key: 'type', width: 12 },
-      { key: 'amt', width: 18 },
+      { key: 'desc', width: 28 },
+      { key: 'type', width: 10 },
+      { key: 'amt', width: 15 },
+      { key: 'spacer', width: 4 }, // Spacer for chart
+      { key: 'chartContent', width: 50 }, // Placeholder for chart area
     ];
 
     // 1. BANNER HEADER
-    worksheet.mergeCells('A1:E2');
+    worksheet.mergeCells('A1:G2');
     const banner = worksheet.getCell('A1');
-    banner.value = 'MONEYFLOW PRO ACCOUNTING - FINANCIAL DASHBOARD';
-    banner.font = { name: 'Segoe UI', bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+    banner.value = 'RESEARCHFLOW PRO - DYNAMIC FINANCIAL DASHBOARD';
+    banner.font = { name: 'Segoe UI', bold: true, size: 18, color: { argb: 'FFFFFFFF' } };
     banner.alignment = { vertical: 'middle', horizontal: 'center' };
-    banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } }; // primary: #8b5cf6
+    banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } };
 
-    // 2. KPI CARDS (DASHBOARD STYLE)
-    // Card Title Label
+    // 2. KPI CARDS
     worksheet.mergeCells('A4:E4');
     const cardTitle = worksheet.getCell('A4');
-    cardTitle.value = `FINANCIAL PERFORMANCE OVERVIEW (${new Date().toLocaleDateString('id-ID')})`;
-    cardTitle.font = { bold: true, size: 11, color: { argb: 'FF1E293B' } };
+    cardTitle.value = `FINANCIAL OVERVIEW: ${new Date().toLocaleDateString('id-ID')}`;
+    cardTitle.font = { bold: true, size: 12 };
 
-    // KPI: INCOME
+    // KPI Blocks
     worksheet.mergeCells('A5:B6');
     const cardInc = worksheet.getCell('A5');
-    cardInc.value = `TOTAL INCOME\nRp ${totalIn.toLocaleString('id-ID')}`;
-    cardInc.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    cardInc.value = `INCOME\nRp ${totalIn.toLocaleString('id-ID')}`;
+    cardInc.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cardInc.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    cardInc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } }; // Secondary: #10b981
+    cardInc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
 
-    // KPI: EXPENSE
     worksheet.mergeCells('C5:D6');
     const cardExp = worksheet.getCell('C5');
-    cardExp.value = `TOTAL EXPENSE\nRp ${totalOut.toLocaleString('id-ID')}`;
-    cardExp.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    cardExp.value = `EXPENSE\nRp ${totalOut.toLocaleString('id-ID')}`;
+    cardExp.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cardExp.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    cardExp.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF43F5E' } }; // Accent: #f43f5e
+    cardExp.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF43F5E' } };
 
-    // KPI: BALANCE
     worksheet.mergeCells('E5:E6');
     const cardBal = worksheet.getCell('E5');
-    cardBal.value = `REMAINING\nRp ${(totalIn - totalOut).toLocaleString('id-ID')}`;
-    cardBal.font = { name: 'Arial', bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    cardBal.value = `NET BALANCE\nRp ${(totalIn - totalOut).toLocaleString('id-ID')}`;
+    cardBal.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cardBal.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    cardBal.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } }; // Info blue
+    cardBal.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
 
-    // 3. ANALYSIS TABLE HEADER
-    const headerRow = worksheet.getRow(8);
-    headerRow.values = ["NO", "DATE", "DESCRIPTION", "ACTIVITY", "AMOUNT (RP)"];
+    // 3. ADD CHART IMAGE
+    if (chartImage) {
+        const imageId = workbook.addImage({
+            base64: chartImage,
+            extension: 'png',
+        });
+        worksheet.addImage(imageId, {
+            tl: { col: 6.2, row: 3.5 }, // Start at Column G
+            ext: { width: 520, height: 260 }
+        });
+    }
+
+    // 4. DATA TABLE
+    const startRow = 9;
+    const headerRow = worksheet.getRow(startRow);
+    headerRow.values = ["NO", "DATE", "DESCRIPTION", "ACTIVITY", "AMOUNT", "", "VISUAL ANALYSIS (REAL-TIME TREND)"];
     headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    headerRow.alignment = { horizontal: 'center' };
-    headerRow.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+    headerRow.eachCell((cell, i) => {
+      if (i <= 5) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      }
     });
 
-    // 4. DATA ROWS
     const sortedTx = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
     sortedTx.forEach((tx, idx) => {
-      const r = worksheet.addRow([
-        idx + 1,
-        tx.date,
-        tx.description,
-        tx.type.toUpperCase(),
-        tx.amount
-      ]);
+      const r = worksheet.addRow([idx + 1, tx.date, tx.description, tx.type.toUpperCase(), tx.amount]);
       r.getCell(5).numFmt = '#,##0';
       r.eachCell((cell, i) => {
-        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-        if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-        if (i === 4) { // Activity color
-           cell.font = { bold: true, color: { argb: tx.type === 'income' ? 'FF059669' : 'FFBE123C' } };
+        if (i <= 5) {
+          cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+          if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+          if (i === 4) cell.font = { bold: true, color: { argb: tx.type === 'income' ? 'FF059669' : 'FFBE123C' } };
         }
       });
     });
 
-    // 5. SUMMARY FOOTER
-    const footerIdx = worksheet.lastRow ? worksheet.lastRow.number + 2 : 12;
-    worksheet.mergeCells(`A${footerIdx}:E${footerIdx}`);
+    // 5. FOOTER
+    const footerIdx = worksheet.lastRow ? worksheet.lastRow.number + 2 : 15;
+    worksheet.mergeCells(`A${footerIdx}:G${footerIdx}`);
     const footCell = worksheet.getCell(`A${footerIdx}`);
-    footCell.value = 'Data Generated via MoneyFlow AI Agent - Research-Flow Edition';
+    footCell.value = 'MoneyFlow Research Agent - Smart Financial Visualizer v3.5';
     footCell.font = { italic: true, size: 10, color: { argb: 'FF94A3B8' } };
     footCell.alignment = { horizontal: 'center' };
 
-    // GENERATE AND SAVE
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `ResearchFlow_Financial_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    saveAs(blob, `ResearchFlow_Dashboard_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
@@ -372,7 +395,7 @@ const App: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
           <div className="glass-card">
              <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><BarChart3 size={18} /> {t.chart_title}</h4>
-             <div style={{ height: '280px' }}>
+             <div ref={chartRef} style={{ height: '280px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={historyData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
