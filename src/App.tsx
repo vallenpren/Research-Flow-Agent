@@ -8,9 +8,7 @@ import {
   History,
   Languages,
   Trash2,
-  PieChart as PieIcon,
   BarChart3,
-  Calendar,
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
