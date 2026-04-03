@@ -223,18 +223,36 @@ const App: React.FC = () => {
 
   return (
     <div className="container">
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1.25rem', border: '1px solid rgba(255,255,255,0.05)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div className="glass-card" style={{ padding: '0.6rem', borderRadius: '0.75rem', background: 'var(--primary-glow)' }}>
             <Wallet size={24} color="white" />
           </div>
-          <span style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{t.title} <span style={{ color: 'var(--primary)' }}>{t.agent}</span></span>
+          <span style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+            <span style={{ color: '#ff4444', textShadow: '0 0 10px rgba(255, 68, 68, 0.3)' }}>{t.title}</span> 
+            <span style={{ color: 'var(--primary)' }}> {t.agent}</span>
+          </span>
         </div>
         <div style={{ display: 'flex', gap: '0.8rem' }}>
-          <button className="glass-card" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--secondary)' }} onClick={exportToCSV}>
-            <Download size={16} /> {t.btn_export}
+          <button 
+            className="glass-card" 
+            style={{ 
+              padding: '0.6rem 1rem', 
+              fontSize: '0.8rem', 
+              fontWeight: 'bold', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              color: 'var(--secondary)', 
+              border: '2px solid var(--secondary)',
+              cursor: 'pointer',
+              zIndex: 100
+            }} 
+            onClick={exportToCSV}
+          >
+            <Download size={18} /> {t.btn_export}
           </button>
-          <button className="glass-card" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--primary)' }} onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
+          <button className="glass-card" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--primary)', cursor: 'pointer' }} onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
              {lang.toUpperCase()}
           </button>
         </div>
