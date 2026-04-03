@@ -9,7 +9,9 @@ import {
   Languages,
   Trash2,
   BarChart3,
-  AlertCircle
+  AlertCircle,
+  Download,
+  CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -45,6 +47,7 @@ const translations = {
     bal: "Current Balance",
     chart_title: "Financial Trends (Daily)",
     btn_clear: "Reset Data",
+    btn_export: "Export to Excel",
     table_in: "Income Record",
     table_out: "Expense Record",
     table_hist: "Daily Balance History",
@@ -58,13 +61,14 @@ const translations = {
     title: "MoneyFlow",
     agent: "Agent",
     tagline: "Agen keuangan otomatis kamu. Ketik atau bicara untuk merekap.",
-    placeholder: "Ketik 'Makan bakso 20rb' atau klik mic...",
+    placeholder: "Cth: 'Januari tanggal 3 pemasukan 20rb makan'...",
     listening: "Mendengarkan...",
     inc: "Pemasukan",
     exp: "Pengeluaran",
     bal: "Sisa Saldo",
     chart_title: "Tren Keuangan (Harian)",
     btn_clear: "Reset Data",
+    btn_export: "Unduh Excel (.csv)",
     table_in: "Tabel Pemasukan",
     table_out: "Tabel Pengeluaran",
     table_hist: "Tabel Riwayat Saldo",
@@ -74,6 +78,13 @@ const translations = {
     col_rem: "Sisa",
     no_data: "Belum ada transaksi tercatat."
   }
+};
+
+const monthsMap: { [key: string]: number } = {
+  januari: 0, january: 0, february: 1, februari: 1, march: 2, maret: 2, 
+  april: 3, may: 4, mei: 4, june: 5, juni: 5, july: 6, juli: 6, 
+  august: 7, agustus: 7, september: 8, october: 9, oktober: 9, 
+  november: 10, december: 11, desember: 11
 };
 
 const App: React.FC = () => {
@@ -86,59 +97,75 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Persist Data
   useEffect(() => {
     localStorage.setItem('moneyflow_data', JSON.stringify(transactions));
   }, [transactions]);
 
-  // --- CORE LOGIC: PARSING ---
+  // --- IMPROVED NLP PARSING ---
   const processInput = (input: string) => {
     if (!input.trim()) return;
 
-    // Detection logic for Indonesian & English amounts
-    // Supports 20rb, 20.000, 20k, 1juta, etc.
+    const lower = input.toLowerCase();
+    
+    // 1. Extract Amount
     const amountMatch = input.match(/(\d+[\d,.]*)[\s.]*(rb|ribu|k|000|juta|jt|million|m)?/i);
     let amount = 0;
-    
     if (amountMatch) {
       let rawNum = amountMatch[1].replace(/[,.]/g, '');
       amount = parseInt(rawNum);
       const suffix = (amountMatch[2] || '').toLowerCase();
-      
       if (suffix.includes('rb') || suffix.includes('ribu') || suffix.includes('k')) amount *= 1000;
       if (suffix.includes('juta') || suffix.includes('jt') || suffix.includes('million') || suffix.includes('m')) amount *= 1000000;
     }
 
-    const lower = input.toLowerCase();
-    let type: 'income' | 'expense' = 'expense';
-    // Income keywords
-    const incWords = ['gaji', 'masuk', 'pemasukan', 'income', 'tambah', 'bonus', 'salary', 'received'];
-    if (incWords.some(w => lower.includes(w))) {
-      type = 'income';
+    // 2. Extract Date & Month
+    let targetDate = new Date();
+    const dayMatch = lower.match(/tanggal\s+(\d+)|date\s+(\d+)/i);
+    const day = dayMatch ? parseInt(dayMatch[1] || dayMatch[2]) : targetDate.getDate();
+    
+    let monthFound = targetDate.getMonth();
+    for (const m in monthsMap) {
+      if (lower.includes(m)) {
+        monthFound = monthsMap[m];
+        break;
+      }
     }
+    targetDate.setMonth(monthFound);
+    targetDate.setDate(day);
+
+    // 3. Extract Type
+    let type: 'income' | 'expense' = 'expense';
+    const incWords = ['gaji', 'masuk', 'pemasukan', 'income', 'tambah', 'bonus', 'received', 'untung'];
+    if (incWords.some(w => lower.includes(w))) type = 'income';
+
+    // 4. Extract Description
+    let description = input
+      .replace(/(\d+[\d,.]*)[\s.]*(rb|ribu|k|000|juta|jt|million|m)?/i, '')
+      .replace(/tanggal\s+\d+|date\s+\d+/gi, '')
+      .replace(new RegExp(Object.keys(monthsMap).join('|'), 'gi'), '')
+      .replace(/pemasukan|pengeluaran|income|expense|masuk|keluar/gi, '')
+      .trim();
+
+    if (!description) description = type === 'income' ? 'Pemasukan' : 'Pengeluaran';
 
     if (amount > 0) {
       const newTx: Transaction = {
         id: Date.now().toString(),
-        date: new Date().toISOString().split('T')[0],
-        description: input.replace(/(\d+).*/, '').trim() || (type === 'income' ? 'Income' : 'Expense'),
+        date: targetDate.toISOString().split('T')[0],
+        description,
         amount,
         type
       };
       setTransactions([newTx, ...transactions]);
       setFinanceInput('');
     } else {
-      alert(lang === 'id' ? "Duh, nominal uangnya tidak terbaca. Coba ketik: 'Bakso 20rb'" : "Amount not detected. Try: 'Lunch 50k'");
+      alert(lang === 'id' ? "Format tidak terbaca. Contoh: 'Gaji 5juta bulan Januari tanggal 2'" : "Format error. Example: 'Salary 5000 in January date 2'");
     }
   };
 
-  // --- VOICE ACTION ---
   const toggleListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Speech recognition not supported in this browser.");
-      return;
-    }
+    if (!SpeechRecognition) return;
     const recognition = new SpeechRecognition();
     recognition.lang = lang === 'id' ? 'id-ID' : 'en-US';
     recognition.onstart = () => setIsListening(true);
@@ -151,7 +178,29 @@ const App: React.FC = () => {
     recognition.start();
   };
 
-  // --- CALCULATIONS ---
+  // --- DATA EXPORT TO EXCEL (CSV) ---
+  const exportToCSV = () => {
+    const headers = ["Date", "Description", "Type", "Amount"];
+    const rows = transactions.map(tx => [
+      tx.date, 
+      tx.description, 
+      tx.type.toUpperCase(), 
+      tx.amount
+    ]);
+    
+    let csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(",") + "\n" 
+      + rows.map(e => e.join(",")).join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `MoneyFlow_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
   const totalOut = transactions.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
   const balance = totalIn - totalOut;
@@ -163,18 +212,15 @@ const App: React.FC = () => {
     return acc;
   }, {});
 
-  const chartData = Object.values(groupedByDate).sort((a: any, b: any) => a.date.localeCompare(b.date));
-  
-  // Running Balance Calculation
+  const sortedDates = Object.values(groupedByDate).sort((a: any, b: any) => a.date.localeCompare(b.date));
   let running = 0;
-  const historyData = chartData.map((d: any) => {
+  const historyData = sortedDates.map((d: any) => {
     running += (d.in - d.out);
     return { ...d, balance: running };
   });
 
   return (
     <div className="container">
-      {/* Top Navbar */}
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div className="glass-card" style={{ padding: '0.6rem', borderRadius: '0.75rem', background: 'var(--primary-glow)' }}>
@@ -182,159 +228,117 @@ const App: React.FC = () => {
           </div>
           <span style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{t.title} <span style={{ color: 'var(--primary)' }}>{t.agent}</span></span>
         </div>
-        <button 
-          className="glass-card" 
-          style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid var(--primary-glow)', color: 'var(--primary)' }}
-          onClick={() => setLang(lang === 'id' ? 'en' : 'id')}
-        >
-          <Languages size={16} /> {lang.toUpperCase()}
-        </button>
-      </nav>
-
-      {/* Hero Header */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: 'center', marginBottom: '3rem' }}>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>{t.tagline}</p>
-      </motion.div>
-
-      {/* Main Stats Card */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
-        <motion.div whileHover={{ y: -5 }} className="glass-card">
-          <TrendingUp color="var(--secondary)" size={22} style={{ marginBottom: '0.75rem' }} />
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t.inc}</p>
-          <h3 style={{ fontSize: '1.4rem', fontWeight: '700', color: 'var(--secondary)' }}>Rp{totalIn.toLocaleString()}</h3>
-        </motion.div>
-        <motion.div whileHover={{ y: -5 }} className="glass-card">
-          <TrendingDown color="var(--accent)" size={22} style={{ marginBottom: '0.75rem' }} />
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t.exp}</p>
-          <h3 style={{ fontSize: '1.4rem', fontWeight: '700', color: 'var(--accent)' }}>Rp{totalOut.toLocaleString()}</h3>
-        </motion.div>
-        <motion.div whileHover={{ y: -5 }} className="glass-card" style={{ border: '1px solid var(--primary)' }}>
-          <Wallet color="var(--primary)" size={22} style={{ marginBottom: '0.75rem' }} />
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t.bal}</p>
-          <h3 style={{ fontSize: '1.4rem', fontWeight: '700' }}>Rp{balance.toLocaleString()}</h3>
-        </motion.div>
-      </div>
-
-      <main>
-        {/* Input Control Center */}
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '3rem' }}>
-          <div style={{ flex: 1, position: 'relative' }}>
-             <input 
-               className="input-field"
-               style={{ height: '4rem', paddingLeft: '1.25rem', fontSize: '1rem', borderRadius: '1.25rem' }}
-               placeholder={isListening ? t.listening : t.placeholder}
-               value={financeInput}
-               onChange={(e) => setFinanceInput(e.target.value)}
-               onKeyDown={(e) => e.key === 'Enter' && processInput(financeInput)}
-             />
-             <motion.button 
-               whileTap={{ scale: 0.95 }}
-               className="btn-primary" 
-               style={{ position: 'absolute', right: '8px', top: '8px', bottom: '8px', borderRadius: '1rem', padding: '0 1.5rem' }}
-               onClick={() => processInput(financeInput)}
-             >
-               <Plus size={24} />
-             </motion.button>
-          </div>
-          <button className={`mic-btn ${isListening ? 'listening' : ''}`} onClick={toggleListening}>
-            <Mic size={28} />
+        <div style={{ display: 'flex', gap: '0.8rem' }}>
+          <button className="glass-card" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--secondary)' }} onClick={exportToCSV}>
+            <Download size={16} /> {t.btn_export}
+          </button>
+          <button className="glass-card" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--primary)' }} onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>
+             {lang.toUpperCase()}
           </button>
         </div>
+      </nav>
 
-        {/* Charts & Reports */}
-        <AnimatePresence>
-          {transactions.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
-              
-              {/* Chart Card */}
-              <div className="glass-card" style={{ padding: '2rem' }}>
-                <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <BarChart3 size={20} color="var(--primary)" /> {t.chart_title}
-                </h4>
-                <div style={{ height: '300px', width: '100%' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={historyData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} />
-                      <YAxis stroke="var(--text-muted)" fontSize={12} />
-                      <Tooltip contentStyle={{ background: '#1e293b', border: 'none', borderRadius: '1rem', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }} />
-                      <Legend verticalAlign="top" height={36}/>
-                      <Bar name={t.inc} dataKey="in" fill="var(--secondary)" radius={[6, 6, 0, 0]} />
-                      <Bar name={t.exp} dataKey="out" fill="var(--accent)" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>{t.tagline}</p>
+      </motion.div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
+        <div className="glass-card">
+          <TrendingUp color="var(--secondary)" size={20} />
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.5rem' }}>{t.inc}</p>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--secondary)' }}>Rp{totalIn.toLocaleString()}</h3>
+        </div>
+        <div className="glass-card">
+          <TrendingDown color="var(--accent)" size={20} />
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.5rem' }}>{t.exp}</p>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--accent)' }}>Rp{totalOut.toLocaleString()}</h3>
+        </div>
+        <div className="glass-card" style={{ border: '1px solid var(--primary)' }}>
+          <Wallet color="var(--primary)" size={20} />
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.5rem' }}>{t.bal}</p>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Rp{balance.toLocaleString()}</h3>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '3rem' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+           <input className="input-field" style={{ height: '4rem', paddingLeft: '1.25rem', fontSize: '1rem', borderRadius: '1.25rem' }} placeholder={isListening ? t.listening : t.placeholder} value={financeInput} onChange={(e) => setFinanceInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && processInput(financeInput)} />
+           <button className="btn-primary" style={{ position: 'absolute', right: '8px', top: '8px', bottom: '8px', borderRadius: '1rem', padding: '0 1.5rem' }} onClick={() => processInput(financeInput)}>
+             <Plus size={24} />
+           </button>
+        </div>
+        <button className={`mic-btn ${isListening ? 'listening' : ''}`} onClick={toggleListening}>
+          <Mic size={28} />
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {transactions.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <div className="glass-card">
+              <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><BarChart3 size={18} /> {t.chart_title}</h4>
+              <div style={{ height: '250px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={historyData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={10} />
+                    <YAxis stroke="var(--text-muted)" fontSize={10} />
+                    <Tooltip contentStyle={{ background: '#1e293b', border: 'none', borderRadius: '1rem' }} />
+                    <Legend verticalAlign="top" height={36}/>
+                    <Bar name={t.inc} dataKey="in" fill="var(--secondary)" radius={[4, 4, 0, 0]} />
+                    <Bar name={t.exp} dataKey="out" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
+            </div>
 
-              {/* Grid for Tables (Record In & Record Out) */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
-                <div className="glass-card">
-                  <h4 style={{ marginBottom: '1rem', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><TrendingUp size={18} /> {t.table_in}</h4>
-                  <table className="finance-table">
-                    <thead><tr><th>{t.col_date}</th><th>{t.col_desc}</th><th>{t.col_amt}</th></tr></thead>
-                    <tbody>
-                      {transactions.filter(tx => tx.type === 'income').slice(0, 5).map(tx => (
-                        <tr key={tx.id}><td>{tx.date}</td><td>{tx.description}</td><td className="amount-in">+{tx.amount.toLocaleString()}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="glass-card">
-                  <h4 style={{ marginBottom: '1rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><TrendingDown size={18} /> {t.table_out}</h4>
-                  <table className="finance-table">
-                    <thead><tr><th>{t.col_date}</th><th>{t.col_desc}</th><th>{t.col_amt}</th></tr></thead>
-                    <tbody>
-                      {transactions.filter(tx => tx.type === 'expense').slice(0, 5).map(tx => (
-                        <tr key={tx.id}><td>{tx.date}</td><td>{tx.description}</td><td className="amount-out">-{tx.amount.toLocaleString()}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* History Table (Summary) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
               <div className="glass-card">
-                <h4 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <History size={18} color="var(--primary)" /> {t.table_hist}
-                </h4>
+                <h4 style={{ marginBottom: '1rem', color: 'var(--secondary)' }}>{t.table_in}</h4>
                 <table className="finance-table">
-                  <thead><tr><th>{t.col_date}</th><th>{t.inc}</th><th>{t.exp}</th><th>{t.col_rem}</th></tr></thead>
+                  <thead><tr><th>{t.col_date}</th><th>{t.col_desc}</th><th>{t.col_amt}</th></tr></thead>
                   <tbody>
-                    {historyData.slice().reverse().map((h, i) => (
-                      <tr key={i}>
-                        <td>{h.date}</td>
-                        <td className="amount-in">{h.in > 0 ? `+${h.in.toLocaleString()}` : '-'}</td>
-                        <td className="amount-out">{h.out > 0 ? `-${h.out.toLocaleString()}` : '-'}</td>
-                        <td style={{ fontWeight: '700' }}>Rp{h.balance.toLocaleString()}</td>
-                      </tr>
+                    {transactions.filter(tx => tx.type === 'income').slice(0, 10).map(tx => (
+                      <tr key={tx.id}><td>{tx.date}</td><td>{tx.description}</td><td className="amount-in">+{tx.amount.toLocaleString()}</td></tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-
-              {/* Danger Zone */}
-              <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-                 <button 
-                  onClick={() => confirm("Reset all data?") && setTransactions([])}
-                  style={{ background: 'transparent', border: '1px solid rgba(244, 63, 94, 0.2)', color: 'var(--accent)', padding: '0.6rem 1.2rem', borderRadius: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0 auto' }}
-                 >
-                   <Trash2 size={16} /> {t.btn_clear}
-                 </button>
+              <div className="glass-card">
+                <h4 style={{ marginBottom: '1rem', color: 'var(--accent)' }}>{t.table_out}</h4>
+                <table className="finance-table">
+                  <thead><tr><th>{t.col_date}</th><th>{t.col_desc}</th><th>{t.col_amt}</th></tr></thead>
+                  <tbody>
+                    {transactions.filter(tx => tx.type === 'expense').slice(0, 10).map(tx => (
+                      <tr key={tx.id}><td>{tx.date}</td><td>{tx.description}</td><td className="amount-out">-{tx.amount.toLocaleString()}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-
             </div>
-          ) : (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-muted)' }}>
-               <AlertCircle size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
-               <p>{t.no_data}</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
 
-      <footer style={{ marginTop: '5rem', textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', borderTop: '1px solid var(--card-border)' }}>
-        <p>&copy; 2026 MoneyFlow Agent • Your Personal Economy Intelligence</p>
-      </footer>
+            <div className="glass-card">
+              <h4 style={{ marginBottom: '1rem', color: 'var(--primary)' }}>{t.table_hist}</h4>
+              <table className="finance-table">
+                <thead><tr><th>{t.col_date}</th><th>{t.inc}</th><th>{t.exp}</th><th>{t.col_rem}</th></tr></thead>
+                <tbody>
+                  {historyData.slice().reverse().map((h, i) => (
+                    <tr key={i}><td>{h.date}</td><td className="amount-in">{h.in > 0 ? `+${h.in.toLocaleString()}` : '-'}</td><td className="amount-out">{h.out > 0 ? `-${h.out.toLocaleString()}` : '-'}</td><td>Rp{h.balance.toLocaleString()}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ textAlign: 'center' }}>
+               <button onClick={() => confirm("Hapus semua data?") && setTransactions([])} style={{ background: 'transparent', border: '1px solid rgba(244, 63, 94, 0.2)', color: 'var(--accent)', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}>
+                 <Trash2 size={16} /> {t.btn_clear}
+               </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', opacity: 0.3 }}>{t.no_data}</div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
