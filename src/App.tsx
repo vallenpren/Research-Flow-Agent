@@ -10,8 +10,7 @@ import {
   Trash2,
   BarChart3,
   AlertCircle,
-  Download,
-  CheckCircle2
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
