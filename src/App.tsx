@@ -261,12 +261,12 @@ const App: React.FC = () => {
       { key: 'stat', width: 12 },
     ];
 
-    // 2. HEADER BANNER (YELLOW)
+    // 2. HEADER BANNER (PREMIUM DARK SLATE)
     worksheet.mergeCells('A1:G2');
     const header = worksheet.getCell('A1');
-    header.value = 'PREMIUM FINANCIAL ANALYSIS REPORT';
-    header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBFF00' } };
-    header.font = { bold: true, size: 18, color: { argb: 'FF000000' } };
+    header.value = 'MONTHLY FINANCIAL EXECUTIVE SUMMARY';
+    header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    header.font = { bold: true, size: 20, color: { argb: 'FFFFFFFF' }, name: 'Calibri' };
     header.alignment = { horizontal: 'center', vertical: 'middle' };
 
     // 3. EMBED CHARTS (SIDE BY SIDE - NO OVERLAP)
