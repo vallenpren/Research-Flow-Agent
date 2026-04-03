@@ -129,11 +129,12 @@ const App: React.FC = () => {
     setMAmt(formatNumber(e.target.value));
   };
 
-  // --- SMART PARSING ---
+  // --- SMART PARSING (UPGRADED WITH YEAR SUPPORT) ---
   const processSmartInput = (input: string) => {
     if (!input.trim()) return;
     const lower = input.toLowerCase();
     
+    // 1. Amount Extraction
     const amountMatch = input.match(/(\d+[\d,.]*)[\s.]*(rb|ribu|k|000|juta|jt|million|m)?/i);
     let amount = 0;
     if (amountMatch) {
@@ -143,18 +144,43 @@ const App: React.FC = () => {
       if (suffix.includes('juta') || suffix.includes('jt') || suffix.includes('million') || suffix.includes('m')) amount *= 1000000;
     }
 
+    // 2. Date Parsing (Day, Month, Year)
     let targetDate = new Date();
-    const dayMatch = lower.match(/tanggal\s+(\d+)|date\s+(\d+)/i);
-    const day = dayMatch ? parseInt(dayMatch[1] || dayMatch[2]) : targetDate.getDate();
-    let monthFound = targetDate.getMonth();
-    for (const m in monthsMap) { if (lower.includes(m)) { monthFound = monthsMap[m]; break; } }
-    targetDate.setMonth(monthFound); targetDate.setDate(day);
+    
+    // Year Parsing
+    const yearMatch = lower.match(/tahun\s+(\d{4})|(\d{4})/i);
+    if (yearMatch) {
+      const parsedYear = parseInt(yearMatch[1] || yearMatch[2]);
+      if (parsedYear > 1900 && parsedYear < 2100) {
+        targetDate.setFullYear(parsedYear);
+      }
+    }
 
+    // Month Parsing
+    let monthFound = targetDate.getMonth();
+    for (const m in monthsMap) { 
+      if (lower.includes(m)) { 
+        monthFound = monthsMap[m]; 
+        break; 
+      } 
+    }
+    targetDate.setMonth(monthFound);
+
+    // Day Parsing
+    const dayMatch = lower.match(/tanggal\s+(\d+)|date\s+(\d+)/i);
+    if (dayMatch) {
+      targetDate.setDate(parseInt(dayMatch[1] || dayMatch[2]));
+    }
+
+    // 3. Type Detection
     let type: 'income' | 'expense' = lower.match(/gaji|masuk|pemasukan|income|tambah|bonus|untung/) ? 'income' : 'expense';
+    
+    // 4. Description Cleaning
     let description = input.replace(/(\d+[\d,.]*)[\s.]*(rb|ribu|k|000|juta|jt|million|m)?/i, '')
-      .replace(/tanggal\s+\d+|date\s+\d+|bulan|month/gi, '')
+      .replace(/tanggal\s+\d+|date\s+\d+|bulan|month|tahun\s+\d+/gi, '')
       .replace(new RegExp(Object.keys(monthsMap).join('|'), 'gi'), '')
       .replace(/pemasukan|pengeluaran|income|expense|masuk|keluar|dengan keterangan|dengan|keterangan|untuk|buat/gi, '')
+      .replace(/\s+/g, ' ')
       .trim();
 
     if (amount > 0) {
