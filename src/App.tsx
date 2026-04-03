@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import html2canvas from 'html2canvas';
 import { 
   Wallet,
   Mic,
@@ -109,11 +108,10 @@ const App: React.FC = () => {
   const [mType, setMType] = useState<'income' | 'expense'>('expense');
   const [mAmt, setMAmt] = useState('');
 
-  // Refs for auto-focus navigation and chart capture
+  // Refs for auto-focus navigation
   const descRef = useRef<HTMLInputElement>(null);
   const typeRef = useRef<HTMLSelectElement>(null);
   const amtRef = useRef<HTMLInputElement>(null);
-  const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     localStorage.setItem('moneyflow_data', JSON.stringify(transactions));
@@ -301,7 +299,6 @@ const App: React.FC = () => {
     const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
     sorted.forEach((tx, idx) => {
         const rowIdx = tableHeaderRow + 1 + idx;
-        const currentBudget = tx.amount * 1.1; // Mock internal budget per item
         const status = tx.type === 'income' ? '🟢' : '🔴';
         
         worksheet.getRow(rowIdx).values = [
@@ -425,7 +422,7 @@ const App: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
           <div className="glass-card">
              <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><BarChart3 size={18} /> {t.chart_title}</h4>
-             <div ref={chartRef} style={{ height: '280px' }}>
+             <div style={{ height: '280px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={historyData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
