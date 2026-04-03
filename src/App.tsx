@@ -102,6 +102,10 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Calculate totals at the top to avoid initialization issues
+  const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
+  const totalOut = transactions.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
+
   // Manual Form States
   const [mDate, setMDate] = useState(new Date().toISOString().split('T')[0]);
   const [mDesc, setMDesc] = useState('');
@@ -328,9 +332,6 @@ const App: React.FC = () => {
     saveAs(blob, `MoneyFlow_App_Style_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
-  const totalOut = transactions.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
-  
   const groupedByDate = transactions.reduce((acc: any, tx) => {
     if (!acc[tx.date]) acc[tx.date] = { date: tx.date, in: 0, out: 0 };
     if (tx.type === 'income') acc[tx.date].in += tx.amount;
@@ -460,7 +461,7 @@ const App: React.FC = () => {
       )}
 
       <footer style={{ marginTop: '5rem', textAlign: 'center', padding: '2.5rem 0', borderTop: '1px solid var(--card-border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-         <p>&copy; 2026 MoneyFlow Agent • Professional Accounting Node v3.0</p>
+         <p>&copy; 2026 MoneyFlow Agent • Professional Accounting Node v3.1 [BUILD_FIX_V3]</p>
       </footer>
     </div>
   );
