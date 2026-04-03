@@ -1,337 +1,342 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  FileText, 
-  Video, 
-  Globe, 
-  Download, 
-  RefreshCcw, 
-  AlertCircle,
-  FileSearch,
-  Send,
-  Loader2,
-  Sparkles,
-  ClipboardCheck,
-  LayoutDashboard
+  Wallet,
+  Mic,
+  Plus,
+  TrendingDown,
+  TrendingUp,
+  History,
+  Languages,
+  Trash2,
+  PieChart as PieIcon,
+  BarChart3,
+  Calendar,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { agentService, type AgentResult } from './services/ResearchAgent';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Legend
+} from 'recharts';
 
-// pdfjs-dist setup
-import * as pdfjsLib from 'pdfjs-dist';
-
-const pdfjs = pdfjsLib as any;
-// Normally workers are separate files, but for a simple demo we can use the CDN
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
-
-interface ExtendedResult extends AgentResult {
+// --- TS MODELS ---
+interface Transaction {
+  id: string;
   date: string;
-  source: string;
+  description: string;
+  amount: number;
+  type: 'income' | 'expense';
 }
 
+// --- TRANSLATIONS ---
+const translations = {
+  en: {
+    title: "MoneyFlow",
+    agent: "Agent",
+    tagline: "Your autonomous financial assistant. Speak or type to track.",
+    placeholder: "Type 'Spent 50k on coffee' or click mic...",
+    listening: "Listening now...",
+    inc: "Total Income",
+    exp: "Total Expense",
+    bal: "Current Balance",
+    chart_title: "Financial Trends (Daily)",
+    btn_clear: "Reset Data",
+    table_in: "Income Record",
+    table_out: "Expense Record",
+    table_hist: "Daily Balance History",
+    col_date: "Date",
+    col_desc: "Description",
+    col_amt: "Amount",
+    col_rem: "Remaining",
+    no_data: "No transactions recorded yet."
+  },
+  id: {
+    title: "MoneyFlow",
+    agent: "Agent",
+    tagline: "Agen keuangan otomatis kamu. Ketik atau bicara untuk merekap.",
+    placeholder: "Ketik 'Makan bakso 20rb' atau klik mic...",
+    listening: "Mendengarkan...",
+    inc: "Pemasukan",
+    exp: "Pengeluaran",
+    bal: "Sisa Saldo",
+    chart_title: "Tren Keuangan (Harian)",
+    btn_clear: "Reset Data",
+    table_in: "Tabel Pemasukan",
+    table_out: "Tabel Pengeluaran",
+    table_hist: "Tabel Riwayat Saldo",
+    col_date: "Tanggal",
+    col_desc: "Keterangan",
+    col_amt: "Jumlah",
+    col_rem: "Sisa",
+    no_data: "Belum ada transaksi tercatat."
+  }
+};
+
 const App: React.FC = () => {
-  const [sourceType, setSourceType] = useState<'youtube' | 'web' | 'pdf'>('youtube');
-  const [inputValue, setInputValue] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState<ExtendedResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [lang, setLang] = useState<'id' | 'en'>('id');
+  const t = translations[lang];
+  const [financeInput, setFinanceInput] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    const saved = localStorage.getItem('moneyflow_data');
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Persist Data
+  useEffect(() => {
+    localStorage.setItem('moneyflow_data', JSON.stringify(transactions));
+  }, [transactions]);
 
-    setUploadStatus('Extracting content...');
-    setInputValue(file.name);
+  // --- CORE LOGIC: PARSING ---
+  const processInput = (input: string) => {
+    if (!input.trim()) return;
+
+    // Detection logic for Indonesian & English amounts
+    // Supports 20rb, 20.000, 20k, 1juta, etc.
+    const amountMatch = input.match(/(\d+[\d,.]*)[\s.]*(rb|ribu|k|000|juta|jt|million|m)?/i);
+    let amount = 0;
     
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const typedArray = new Uint8Array(event.target?.result as ArrayBuffer);
-        const pdf = await pdfjs.getDocument(typedArray).promise;
-        const page = await pdf.getPage(1);
-        const textContent = await page.getTextContent();
-        const text = textContent.items.map((item: any) => item.str).join(' ');
-        
-        // Use first 200 chars as context for the mock agent
-        setUploadStatus(`PDF Loaded: ${file.name}`);
-        console.log("Extracted sample:", text.substring(0, 100));
+    if (amountMatch) {
+      let rawNum = amountMatch[1].replace(/[,.]/g, '');
+      amount = parseInt(rawNum);
+      const suffix = (amountMatch[2] || '').toLowerCase();
+      
+      if (suffix.includes('rb') || suffix.includes('ribu') || suffix.includes('k')) amount *= 1000;
+      if (suffix.includes('juta') || suffix.includes('jt') || suffix.includes('million') || suffix.includes('m')) amount *= 1000000;
+    }
+
+    const lower = input.toLowerCase();
+    let type: 'income' | 'expense' = 'expense';
+    // Income keywords
+    const incWords = ['gaji', 'masuk', 'pemasukan', 'income', 'tambah', 'bonus', 'salary', 'received'];
+    if (incWords.some(w => lower.includes(w))) {
+      type = 'income';
+    }
+
+    if (amount > 0) {
+      const newTx: Transaction = {
+        id: Date.now().toString(),
+        date: new Date().toISOString().split('T')[0],
+        description: input.replace(/(\d+).*/, '').trim() || (type === 'income' ? 'Income' : 'Expense'),
+        amount,
+        type
       };
-      reader.readAsArrayBuffer(file);
-    } catch (err) {
-      console.error("PDF extraction error:", err);
-      setError("Unable to extract text from PDF. Proceeding with filename only.");
+      setTransactions([newTx, ...transactions]);
+      setFinanceInput('');
+    } else {
+      alert(lang === 'id' ? "Duh, nominal uangnya tidak terbaca. Coba ketik: 'Bakso 20rb'" : "Amount not detected. Try: 'Lunch 50k'");
     }
   };
 
-  const handleProcess = async () => {
-    if (!inputValue && sourceType !== 'pdf') {
-      setError('Please provide a valid source link.');
+  // --- VOICE ACTION ---
+  const toggleListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition not supported in this browser.");
       return;
     }
-    
-    setError(null);
-    setIsProcessing(true);
-    setResult(null);
-    
-    try {
-      const agentData = await agentService.processSource(inputValue, sourceType);
-      
-      setResult({
-        ...agentData,
-        date: new Date().toLocaleDateString(),
-        source: inputValue || "Uploaded Document"
-      });
-      
-    } catch (err) {
-      setError("Autonomous processing failed. High traffic on agent neuron cluster.");
-    } finally {
-      setIsProcessing(false);
-      setUploadStatus('');
-    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = lang === 'id' ? 'id-ID' : 'en-US';
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (event: any) => {
+      const text = event.results[0][0].transcript;
+      setFinanceInput(text);
+      processInput(text);
+    };
+    recognition.start();
   };
 
-  const downloadMarkdown = () => {
-    if (!result) return;
-    
-    const content = `
-# ${result.title}
-**Date:** ${result.date}
-**Source:** ${result.source}
+  // --- CALCULATIONS ---
+  const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
+  const totalOut = transactions.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
+  const balance = totalIn - totalOut;
 
-## 🔍 Key Findings
-${result.keyFindings.map(f => `- ${f}`).join('\n')}
+  const groupedByDate = transactions.reduce((acc: any, tx) => {
+    if (!acc[tx.date]) acc[tx.date] = { date: tx.date, in: 0, out: 0 };
+    if (tx.type === 'income') acc[tx.date].in += tx.amount;
+    else acc[tx.date].out += tx.amount;
+    return acc;
+  }, {});
 
-## 🧪 Methodology
-${result.methodology}
-
-## 🚀 Future Work
-${result.futureWork}
-
----
-**Citation (APA/IEEE):**
-${result.citation}
-
-*Generated by Research-Flow Agent (Autonomous Academic Suite)*
-    `.trim();
-    
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Research_Flow_${result.title.replace(/[^a-z0-9]/gi, '_')}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const chartData = Object.values(groupedByDate).sort((a: any, b: any) => a.date.localeCompare(b.date));
+  
+  // Running Balance Calculation
+  let running = 0;
+  const historyData = chartData.map((d: any) => {
+    running += (d.in - d.out);
+    return { ...d, balance: running };
+  });
 
   return (
     <div className="container">
-      <header className="header-section animate-fade-in" style={{ cursor: 'pointer' }} onClick={() => window.location.reload()}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
-          <motion.div 
-            whileHover={{ scale: 1.1, rotate: 10 }}
-            className="glass-card" 
-            style={{ padding: '0.75rem', borderRadius: '1rem', background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(16, 185, 129, 0.2))' }}
-          >
-            <Sparkles size={32} color="var(--primary)" />
-          </motion.div>
+      {/* Top Navbar */}
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div className="glass-card" style={{ padding: '0.6rem', borderRadius: '0.75rem', background: 'var(--primary-glow)' }}>
+            <Wallet size={24} color="white" />
+          </div>
+          <span style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{t.title} <span style={{ color: 'var(--primary)' }}>{t.agent}</span></span>
         </div>
-        <h1 style={{ letterSpacing: '-0.02em' }}>Research-Flow <span style={{ color: 'var(--primary)' }}>Agent</span></h1>
-        <p style={{ opacity: 0.8, fontSize: '0.95rem' }}>Automate ingestion, synthesis, and citation for any source.</p>
-      </header>
+        <button 
+          className="glass-card" 
+          style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid var(--primary-glow)', color: 'var(--primary)' }}
+          onClick={() => setLang(lang === 'id' ? 'en' : 'id')}
+        >
+          <Languages size={16} /> {lang.toUpperCase()}
+        </button>
+      </nav>
+
+      {/* Hero Header */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: 'center', marginBottom: '3rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>{t.tagline}</p>
+      </motion.div>
+
+      {/* Main Stats Card */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
+        <motion.div whileHover={{ y: -5 }} className="glass-card">
+          <TrendingUp color="var(--secondary)" size={22} style={{ marginBottom: '0.75rem' }} />
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t.inc}</p>
+          <h3 style={{ fontSize: '1.4rem', fontWeight: '700', color: 'var(--secondary)' }}>Rp{totalIn.toLocaleString()}</h3>
+        </motion.div>
+        <motion.div whileHover={{ y: -5 }} className="glass-card">
+          <TrendingDown color="var(--accent)" size={22} style={{ marginBottom: '0.75rem' }} />
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t.exp}</p>
+          <h3 style={{ fontSize: '1.4rem', fontWeight: '700', color: 'var(--accent)' }}>Rp{totalOut.toLocaleString()}</h3>
+        </motion.div>
+        <motion.div whileHover={{ y: -5 }} className="glass-card" style={{ border: '1px solid var(--primary)' }}>
+          <Wallet color="var(--primary)" size={22} style={{ marginBottom: '0.75rem' }} />
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t.bal}</p>
+          <h3 style={{ fontSize: '1.4rem', fontWeight: '700' }}>Rp{balance.toLocaleString()}</h3>
+        </motion.div>
+      </div>
 
       <main>
-        <section className="glass-card animate-fade-in" style={{ animationDelay: '0.2s', padding: '1.75rem' }}>
-          <div className="source-selector">
-            <button 
-              className={`source-btn ${sourceType === 'youtube' ? 'active' : ''}`}
-              onClick={() => setSourceType('youtube')}
-            >
-              <Video size={22} strokeWidth={1.5} />
-              <span>YouTube</span>
-            </button>
-            <button 
-              className={`source-btn ${sourceType === 'web' ? 'active' : ''}`}
-              onClick={() => setSourceType('web')}
-            >
-              <Globe size={22} strokeWidth={1.5} />
-              <span>Article</span>
-            </button>
-            <button 
-              className={`source-btn ${sourceType === 'pdf' ? 'active' : ''}`}
-              onClick={() => setSourceType('pdf')}
-            >
-              <FileSearch size={22} strokeWidth={1.5} />
-              <span>PDF File</span>
-            </button>
-          </div>
-
-          <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
-            {sourceType === 'pdf' ? (
-              <div 
-                className="input-field" 
-                style={{ 
-                  height: '140px', 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: '0.75rem', 
-                  borderStyle: 'dashed',
-                  borderColor: uploadStatus ? 'var(--secondary)' : 'var(--card-border)',
-                  background: uploadStatus ? 'rgba(16, 185, 129, 0.05)' : ''
-                }}
-              >
-                <div style={{ color: uploadStatus ? 'var(--secondary)' : 'var(--text-muted)' }}>
-                  {uploadStatus ? <ClipboardCheck size={44} /> : <FileText size={44} />}
-                </div>
-                <p style={{ fontSize: '0.9rem', color: uploadStatus ? 'var(--text)' : 'var(--text-muted)' }}>
-                  {uploadStatus || "Drop Academic PDF or Upload"}
-                </p>
-                <input 
-                  type="file" 
-                  accept=".pdf" 
-                  style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} 
-                  onChange={handlePdfUpload}
-                />
-              </div>
-            ) : (
-              <>
-                <input 
-                  className="input-field"
-                  placeholder={sourceType === 'youtube' ? "Paste YouTube Video Link..." : "Paste Article/Journal URL..."}
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  style={{ paddingRight: '4.5rem', height: '3.5rem' }}
-                />
-                <motion.button 
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="btn-primary" 
-                  style={{ position: 'absolute', right: '6px', top: '6px', bottom: '6px', padding: '0 1.25rem' }}
-                  onClick={handleProcess}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? <Loader2 className="spinning" size={20} /> : <Send size={20} />}
-                </motion.button>
-              </>
-            )}
-          </div>
-
-          {sourceType === 'pdf' && (
+        {/* Input Control Center */}
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '3rem' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+             <input 
+               className="input-field"
+               style={{ height: '4rem', paddingLeft: '1.25rem', fontSize: '1rem', borderRadius: '1.25rem' }}
+               placeholder={isListening ? t.listening : t.placeholder}
+               value={financeInput}
+               onChange={(e) => setFinanceInput(e.target.value)}
+               onKeyDown={(e) => e.key === 'Enter' && processInput(financeInput)}
+             />
              <motion.button 
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                className="btn-primary" 
-                style={{ width: '100%', height: '3.5rem', fontSize: '1rem' }} 
-                onClick={handleProcess} 
-                disabled={isProcessing || !inputValue}
+               whileTap={{ scale: 0.95 }}
+               className="btn-primary" 
+               style={{ position: 'absolute', right: '8px', top: '8px', bottom: '8px', borderRadius: '1rem', padding: '0 1.5rem' }}
+               onClick={() => processInput(financeInput)}
              >
-                {isProcessing ? <Loader2 className="spinning" size={22} /> : <LayoutDashboard size={22} />}
-                <span style={{ marginLeft: '0.5rem' }}>{isProcessing ? 'Agent Thinking...' : 'Autonomous Process'}</span>
+               <Plus size={24} />
              </motion.button>
-          )}
+          </div>
+          <button className={`mic-btn ${isListening ? 'listening' : ''}`} onClick={toggleListening}>
+            <Mic size={28} />
+          </button>
+        </div>
 
-          {error && (
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              style={{ marginTop: '1.25rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.9rem', padding: '0.75rem', borderRadius: '0.75rem', background: 'rgba(244, 63, 94, 0.05)' }}>
-              <AlertCircle size={18} />
-              {error}
-            </motion.div>
-          )}
-        </section>
-
-        <AnimatePresence mode="wait">
-          {result && (
-            <motion.section 
-              initial={{ opacity: 0, scale: 0.95, y: 30 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -20 }}
-              transition={{ duration: 0.4, type: 'spring' }}
-              className="glass-card" 
-              style={{ marginTop: '2.5rem', borderTop: '4px solid var(--primary)', overflow: 'hidden' }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.75rem' }}>
-                <div style={{ flex: 1, paddingRight: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'var(--secondary)', boxShadow: '0 0 10px var(--secondary-glow)' }} />
-                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Autonomous Synthesis Ready</span>
-                  </div>
-                  <h2 style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '700', marginBottom: '0.4rem' }}>{result.title}</h2>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Ingested: {result.date} • {(sourceType as string).toUpperCase()}</p>
+        {/* Charts & Reports */}
+        <AnimatePresence>
+          {transactions.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+              
+              {/* Chart Card */}
+              <div className="glass-card" style={{ padding: '2rem' }}>
+                <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <BarChart3 size={20} color="var(--primary)" /> {t.chart_title}
+                </h4>
+                <div style={{ height: '300px', width: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={historyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} />
+                      <YAxis stroke="var(--text-muted)" fontSize={12} />
+                      <Tooltip contentStyle={{ background: '#1e293b', border: 'none', borderRadius: '1rem', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }} />
+                      <Legend verticalAlign="top" height={36}/>
+                      <Bar name={t.inc} dataKey="in" fill="var(--secondary)" radius={[6, 6, 0, 0]} />
+                      <Bar name={t.exp} dataKey="out" fill="var(--accent)" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-                <motion.button 
-                  whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.1)' }}
-                  whileTap={{ scale: 0.9 }}
-                  className="btn-primary" 
-                  onClick={downloadMarkdown} 
-                  style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', boxShadow: 'none', padding: '0.75rem' }}
-                >
-                  <Download size={22} color="var(--primary)" />
-                </motion.button>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-                <span className="tag tag-findings">Systematic Findings</span>
-                <span className="tag tag-methodology">Tech Framework</span>
-                <span className="tag tag-future">Future Landscape</span>
+              {/* Grid for Tables (Record In & Record Out) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+                <div className="glass-card">
+                  <h4 style={{ marginBottom: '1rem', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><TrendingUp size={18} /> {t.table_in}</h4>
+                  <table className="finance-table">
+                    <thead><tr><th>{t.col_date}</th><th>{t.col_desc}</th><th>{t.col_amt}</th></tr></thead>
+                    <tbody>
+                      {transactions.filter(tx => tx.type === 'income').slice(0, 5).map(tx => (
+                        <tr key={tx.id}><td>{tx.date}</td><td>{tx.description}</td><td className="amount-in">+{tx.amount.toLocaleString()}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="glass-card">
+                  <h4 style={{ marginBottom: '1rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><TrendingDown size={18} /> {t.table_out}</h4>
+                  <table className="finance-table">
+                    <thead><tr><th>{t.col_date}</th><th>{t.col_desc}</th><th>{t.col_amt}</th></tr></thead>
+                    <tbody>
+                      {transactions.filter(tx => tx.type === 'expense').slice(0, 5).map(tx => (
+                        <tr key={tx.id}><td>{tx.date}</td><td>{tx.description}</td><td className="amount-out">-{tx.amount.toLocaleString()}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <div>
-                  <h3 style={{ fontSize: '1rem', color: 'var(--primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.6rem', fontWeight: '600' }}>
-                    Key Insights
-                  </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {result.keyFindings.map((f, i) => (
-                      <div key={i} style={{ display: 'flex', gap: '1rem' }}>
-                        <div style={{ color: 'var(--primary)', fontWeight: 'bold', opacity: 0.5 }}>0{i+1}</div>
-                        <p style={{ color: '#CBD5E1', fontSize: '0.95rem', lineHeight: '1.5' }}>{f}</p>
-                      </div>
+              {/* History Table (Summary) */}
+              <div className="glass-card">
+                <h4 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <History size={18} color="var(--primary)" /> {t.table_hist}
+                </h4>
+                <table className="finance-table">
+                  <thead><tr><th>{t.col_date}</th><th>{t.inc}</th><th>{t.exp}</th><th>{t.col_rem}</th></tr></thead>
+                  <tbody>
+                    {historyData.slice().reverse().map((h, i) => (
+                      <tr key={i}>
+                        <td>{h.date}</td>
+                        <td className="amount-in">{h.in > 0 ? `+${h.in.toLocaleString()}` : '-'}</td>
+                        <td className="amount-out">{h.out > 0 ? `-${h.out.toLocaleString()}` : '-'}</td>
+                        <td style={{ fontWeight: '700' }}>Rp{h.balance.toLocaleString()}</td>
+                      </tr>
                     ))}
-                  </div>
-                </div>
-
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <h3 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.75rem', fontWeight: '600' }}>Extraction Methodology</h3>
-                  <p style={{ color: '#94A3B8', fontSize: '0.875rem', lineHeight: '1.6', fontStyle: 'italic' }}>{result.methodology}</p>
-                </div>
-
-                <div style={{ borderLeft: '2px solid var(--primary)', paddingLeft: '1.25rem' }}>
-                  <h3 style={{ fontSize: '0.9rem', color: 'var(--primary)', marginBottom: '0.5rem', fontWeight: 'bold' }}>APA / IEEE Citation</h3>
-                  <code style={{ fontSize: '0.825rem', wordBreak: 'break-all', color: '#94A3B8', display: 'block' }}>{result.citation}</code>
-                </div>
+                  </tbody>
+                </table>
               </div>
 
-              <div style={{ marginTop: '2.5rem', borderTop: '1px solid var(--card-border)', paddingTop: '1.25rem', textAlign: 'center' }}>
-                <button 
-                  className="btn-primary" 
-                  style={{ background: 'transparent', border: 'none', boxShadow: 'none', fontSize: '0.875rem', color: 'var(--text-muted)', margin: '0 auto' }}
-                  onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}
-                >
-                  <RefreshCcw size={16} /> Update Source
-                </button>
+              {/* Danger Zone */}
+              <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                 <button 
+                  onClick={() => confirm("Reset all data?") && setTransactions([])}
+                  style={{ background: 'transparent', border: '1px solid rgba(244, 63, 94, 0.2)', color: 'var(--accent)', padding: '0.6rem 1.2rem', borderRadius: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0 auto' }}
+                 >
+                   <Trash2 size={16} /> {t.btn_clear}
+                 </button>
               </div>
-            </motion.section>
+
+            </div>
+          ) : (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-muted)' }}>
+               <AlertCircle size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
+               <p>{t.no_data}</p>
+            </motion.div>
           )}
         </AnimatePresence>
       </main>
 
-      <footer style={{ marginTop: '4rem', textAlign: 'center', padding: '2rem 0', borderTop: '1px solid var(--card-border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-        <p>&copy; 2026 Research-Flow Agent • Built for Academic Efficiency</p>
-        <p style={{ marginTop: '0.5rem', opacity: 0.5 }}>Mobile Optimized Interface • Autonomous Summarization Node v2.4.0</p>
+      <footer style={{ marginTop: '5rem', textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', borderTop: '1px solid var(--card-border)' }}>
+        <p>&copy; 2026 MoneyFlow Agent • Your Personal Economy Intelligence</p>
       </footer>
-
-      <style>{`
-        .spinning { animation: spin 0.8s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        
-        /* Premium Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: var(--background); }
-        ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
-      `}</style>
     </div>
   );
 };
