@@ -9,7 +9,6 @@ import {
   Languages,
   Trash2,
   BarChart3,
-  AlertCircle,
   Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
