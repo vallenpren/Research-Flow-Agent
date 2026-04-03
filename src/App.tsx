@@ -109,6 +109,17 @@ const App: React.FC = () => {
   // Calculate totals at the top to avoid initialization issues
   const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
   const totalOut = transactions.filter(tx => tx.type === 'expense').reduce((s, tx) => s + tx.amount, 0);
+  const savings = totalIn - totalOut;
+  const healthScore = totalIn > 0 ? (savings / totalIn) * 100 : 0;
+  const healthColor = healthScore >= 40 ? '#10b981' : '#f43f5e'; // Green vs Red
+  
+  const groupedByDate = transactions.reduce((acc: any, tx) => {
+    if (!acc[tx.date]) acc[tx.date] = { date: tx.date, in: 0, out: 0 };
+    if (tx.type === 'income') acc[tx.date].in += tx.amount;
+    else acc[tx.date].out += tx.amount;
+    return acc;
+  }, {});
+  const historyData = Object.values(groupedByDate).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
   // Manual Form States
   const [mDate, setMDate] = useState(new Date().toISOString().split('T')[0]);
@@ -224,7 +235,7 @@ const App: React.FC = () => {
       if (!ref.current) return null;
       try {
         const canvas = await html2canvas(ref.current, { 
-          backgroundColor: '#1e293b', 
+          backgroundColor: '#0f172a', 
           scale: 2,
           logging: false,
           useCORS: true 
@@ -237,57 +248,55 @@ const App: React.FC = () => {
     const donutImg = await capture(donutChartRef);
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('FINANCE_REPORT');
+    const worksheet = workbook.addWorksheet('FINANCE_VISUAL_REPORT');
 
-    // 1. COLUMN SETUP (CLEANER - NO SIDEBAR)
+    // 1. COLUMN SETUP
     worksheet.columns = [
-      { key: 'no', width: 6 },
-      { key: 'date', width: 14 },
-      { key: 'desc', width: 32 },
-      { key: 'type', width: 12 },
-      { key: 'amt', width: 18 },
-      { key: 'pct', width: 12 },
-      { key: 'stat', width: 10 },
+      { key: 'no', width: 8 },
+      { key: 'date', width: 16 },
+      { key: 'desc', width: 40 },
+      { key: 'type', width: 14 },
+      { key: 'amt', width: 22 },
+      { key: 'pct', width: 14 },
+      { key: 'stat', width: 12 },
     ];
 
     // 2. HEADER BANNER (YELLOW)
-    worksheet.mergeCells('A1:G1');
+    worksheet.mergeCells('A1:G2');
     const header = worksheet.getCell('A1');
+    header.value = 'PREMIUM FINANCIAL ANALYSIS REPORT';
     header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBFF00' } };
+    header.font = { bold: true, size: 18, color: { argb: 'FF000000' } };
+    header.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    // 3. TITLE
-    worksheet.mergeCells('A3:G4');
-    const title = worksheet.getCell('A3');
-    title.value = 'MONTHLY FINANCIAL VISUALIZATION REPORT';
-    title.font = { bold: true, size: 20, name: 'Impact' };
-    title.alignment = { horizontal: 'center', vertical: 'middle' };
-
-    // 4. EMBED CHARTS (ROUND & BAR)
+    // 3. EMBED CHARTS (SIDE BY SIDE - NO OVERLAP)
     if (donutImg) {
       const id = workbook.addImage({ base64: donutImg, extension: 'png' });
       worksheet.addImage(id, {
-        tl: { col: 0.5, row: 5 },
-        ext: { width: 350, height: 260 }
+        tl: { col: 0.2, row: 4 },
+        ext: { width: 450, height: 350 }
       });
     }
 
     if (barImg) {
       const id = workbook.addImage({ base64: barImg, extension: 'png' });
       worksheet.addImage(id, {
-        tl: { col: 4, row: 5 },
-        ext: { width: 350, height: 260 }
+        tl: { col: 3.5, row: 4 },
+        ext: { width: 450, height: 350 }
       });
     }
 
-    // 5. TABLE CONTENT (MOVED DOWN)
-    const tableRow = 18;
-    const labels = ["No", "Tanggal", "Keterangan", "Aksi", "Nominal", "Actual %", "Status"];
+    // 4. DATA TABLE (PUSHED DOWN TO ROW 25 TO AVOID OVERLAP)
+    const tableRow = 25;
+    const labels = ["No", "Tanggal", "Keterangan", "Aksi", "Nominal", "Wallet %", "Status"];
     const hRow = worksheet.getRow(tableRow);
     hRow.values = labels;
+    hRow.height = 30;
     hRow.eachCell(c => {
-      c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
-      c.alignment = { horizontal: 'center' };
+      c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+      c.border = { top: {style:'medium'}, left: {style:'medium'}, bottom: {style:'medium'}, right: {style:'medium'} };
     });
 
     const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
@@ -312,13 +321,6 @@ const App: React.FC = () => {
     saveAs(blob, `Visual_Financial_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const groupedByDate = transactions.reduce((acc: any, tx) => {
-    if (!acc[tx.date]) acc[tx.date] = { date: tx.date, in: 0, out: 0 };
-    if (tx.type === 'income') acc[tx.date].in += tx.amount;
-    else acc[tx.date].out += tx.amount;
-    return acc;
-  }, {});
-  const historyData = Object.values(groupedByDate).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
   return (
     <div className="container" style={{ padding: '2rem 1.5rem', maxWidth: '900px' }}>
@@ -403,17 +405,20 @@ const App: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
              
-             {/* DIAGRAM BULAT (DONUT) */}
-             <div className="glass-card">
-                <h4 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Zap size={18} /> Percentage Analysis</h4>
-                <div ref={donutChartRef} style={{ height: '280px' }}>
+             {/* DIAGRAM BULAT (DONUT) - KESEHATAN KEUANGAN */}
+             <div className="glass-card" style={{ background: '#0f172a' }}>
+                <h4 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Zap size={18} /> Financial Health</h4>
+                <div ref={donutChartRef} style={{ height: '280px', position: 'relative' }}>
+                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                      <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', margin: 0 }}>SAVINGS</p>
+                      <h2 style={{ fontSize: '2.2rem', fontWeight: 'bold', color: healthColor, margin: 0 }}>{healthScore.toFixed(0)}%</h2>
+                   </div>
                    <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                         <Pie data={[{ name: 'In', value: totalIn }, { name: 'Out', value: totalOut }]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                            <Cell fill="var(--secondary)" />
-                            <Cell fill="var(--accent)" />
+                         <Pie data={[{ name: 'Savings', value: Math.max(0, savings) }, { name: 'Expense', value: totalOut }]} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
+                            <Cell fill={healthColor} />
+                            <Cell fill="rgba(255,255,255,0.1)" />
                          </Pie>
-                         <Tooltip />
                       </PieChart>
                    </ResponsiveContainer>
                 </div>
