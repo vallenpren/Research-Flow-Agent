@@ -5,7 +5,6 @@ import {
   Plus,
   TrendingDown,
   TrendingUp,
-  History,
   Trash2,
   BarChart3,
   Download
