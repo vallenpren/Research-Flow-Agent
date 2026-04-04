@@ -13,7 +13,11 @@ import {
   BarChart3,
   Download,
   Zap,
-  LayoutGrid
+  LayoutGrid,
+  Settings,
+  X,
+  RotateCcw,
+  Palette
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -109,6 +113,13 @@ const App: React.FC = () => {
   const [userName, setUserName] = useState<string | null>(() => localStorage.getItem('moneyflow_user'));
   const [splashStep, setSplashStep] = useState<'initial' | 'input' | 'final'>('initial');
   const [tempName, setTempName] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [theme, setTheme] = useState<'default' | 'ocean'>(() => (localStorage.getItem('moneyflow_theme') as any) || 'default');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('moneyflow_theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     if (userName) {
@@ -347,8 +358,89 @@ const App: React.FC = () => {
   };
 
 
+  const resetName = () => {
+    if (confirm("Reset nama dan mulai dari awal?")) {
+      localStorage.removeItem('moneyflow_user');
+      window.location.reload();
+    }
+  };
+
+
   return (
     <AnimatePresence mode="wait">
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 10000,
+              background: 'rgba(0,0,0,0.8)',
+              backdropFilter: 'blur(10px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2rem'
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="glass-card"
+              style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '1.5rem', border: '1px solid var(--primary)' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                  <Settings size={20} /> Pengaturan
+                </h2>
+                <button 
+                  onClick={() => setShowSettings(false)}
+                  style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Pilih Tema Aplikasi:</p>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <button 
+                    onClick={() => setTheme('default')}
+                    className={`glass-card ${theme === 'default' ? 'active' : ''}`}
+                    style={{ flex: 1, padding: '1rem', textAlign: 'center', cursor: 'pointer', background: theme === 'default' ? 'rgba(139, 92, 246, 0.2)' : 'transparent', border: theme === 'default' ? '2px solid var(--primary)' : '1px solid var(--card-border)' }}
+                  >
+                    <Palette size={20} style={{ color: '#8B5CF6' }} />
+                    <p style={{ fontSize: '0.7rem', marginTop: '0.5rem' }}>Space Dark</p>
+                  </button>
+                  <button 
+                    onClick={() => setTheme('ocean')}
+                    className={`glass-card ${theme === 'ocean' ? 'active' : ''}`}
+                    style={{ flex: 1, padding: '1rem', textAlign: 'center', cursor: 'pointer', background: theme === 'ocean' ? 'rgba(14, 165, 233, 0.2)' : 'transparent', border: theme === 'ocean' ? '2px solid var(--primary)' : '1px solid var(--card-border)' }}
+                  >
+                    <Palette size={20} style={{ color: '#0EA5E9' }} />
+                    <p style={{ fontSize: '0.7rem', marginTop: '0.5rem' }}>Ocean Slate</p>
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--card-border)', paddingTop: '1.5rem' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem' }}>Data & Akun:</p>
+                <button 
+                  onClick={resetName}
+                  className="btn-primary" 
+                  style={{ width: '100%', background: 'rgba(244, 63, 94, 0.1)', color: 'var(--accent)', border: '1px solid var(--accent)', boxShadow: 'none', height: '3.5rem' }}
+                >
+                  <RotateCcw size={16} /> Reset Nama User
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {showSplash ? (
         <motion.div
           key="splash"
@@ -510,6 +602,9 @@ const App: React.FC = () => {
             <Download size={16} /> {t.btn_export}
           </button>
           <button className="glass-card" style={{ width: '40px', height: '40px', borderRadius: '50%', color: 'var(--primary)', fontWeight: 'bold' }} onClick={() => setLang(lang === 'id' ? 'en' : 'id')}>{lang.toUpperCase()}</button>
+          <button className="glass-card" style={{ width: '40px', height: '40px', borderRadius: '50%', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowSettings(true)}>
+            <Settings size={18} />
+          </button>
         </div>
       </nav>
 
