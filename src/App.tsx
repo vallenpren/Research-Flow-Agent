@@ -106,13 +106,30 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
   const [showSplash, setShowSplash] = useState(true);
+  const [userName, setUserName] = useState<string | null>(() => localStorage.getItem('moneyflow_user'));
+  const [splashStep, setSplashStep] = useState<'initial' | 'input' | 'final'>('initial');
+  const [tempName, setTempName] = useState('');
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, []);
+    if (userName) {
+      // Returning user
+      const timer = setTimeout(() => setShowSplash(false), 3000);
+      return () => clearTimeout(timer);
+    } else {
+      // New user
+      const timer1 = setTimeout(() => setSplashStep('input'), 2500);
+      return () => clearTimeout(timer1);
+    }
+  }, [userName]);
+
+  const handleNameSubmit = () => {
+    if (tempName.trim()) {
+      localStorage.setItem('moneyflow_user', tempName.trim());
+      setUserName(tempName.trim());
+      setSplashStep('final');
+      setTimeout(() => setShowSplash(false), 2500);
+    }
+  };
 
   // Calculate totals at the top to avoid initialization issues
   const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
@@ -399,37 +416,79 @@ const App: React.FC = () => {
           <div className="splash-wave" style={{ width: '200px', height: '200px', animationDelay: '2s' }} />
 
           <motion.div style={{ textAlign: 'center', zIndex: 1 }}>
-            <motion.h1
-              initial={{ y: 20, opacity: 0, letterSpacing: "10px" }}
-              animate={{ y: 0, opacity: 1, letterSpacing: "2px" }}
-              transition={{ 
-                duration: 0.8, 
-                ease: "easeOut",
-                delay: 0.2
-              }}
-              className="shimmer-text"
-              style={{
-                fontSize: '5rem',
-                fontWeight: '900',
-                margin: 0,
-                textTransform: 'uppercase'
-              }}
-            >
-              HALLO
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.8 }}
-              style={{
-                color: 'var(--text-muted)',
-                marginTop: '1rem',
-                fontSize: '1rem',
-                letterSpacing: '2px'
-              }}
-            >
-              RESEARCH-FLOW AGENT
-            </motion.p>
+            <AnimatePresence mode="wait">
+              {splashStep === 'input' ? (
+                <motion.div
+                  key="input-step"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.1 }}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}
+                >
+                  <h2 style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--text-muted)' }}>SIAPA NAMA KAMU?</h2>
+                  <div style={{ position: 'relative', width: '300px' }}>
+                    <input 
+                      autoFocus
+                      className="input-field" 
+                      style={{ 
+                        height: '4rem', 
+                        fontSize: '1.5rem', 
+                        textAlign: 'center',
+                        borderRadius: '1.5rem',
+                        border: '2px solid var(--primary-glow)'
+                      }} 
+                      placeholder="..."
+                      value={tempName}
+                      onChange={(e) => setTempName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
+                    />
+                  </div>
+                  <button 
+                    className="btn-primary" 
+                    onClick={handleNameSubmit}
+                    style={{ padding: '1rem 3rem', borderRadius: '1rem' }}
+                  >
+                    MULAI
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.div key="text-step" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <motion.h1
+                    initial={{ y: 20, opacity: 0, letterSpacing: "10px" }}
+                    animate={{ y: 0, opacity: 1, letterSpacing: "2px" }}
+                    transition={{ 
+                      duration: 0.8, 
+                      ease: "easeOut",
+                      delay: 0.2
+                    }}
+                    className="shimmer-text"
+                    style={{
+                      fontSize: '5rem',
+                      fontWeight: '900',
+                      margin: 0,
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    HALLO
+                  </motion.h1>
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.8 }}
+                    style={{
+                      color: 'var(--text-muted)',
+                      marginTop: '1rem',
+                      fontSize: '2rem', // Increased size for name
+                      fontWeight: '700',
+                      letterSpacing: '4px',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    {userName ? userName : "RESEARCH-FLOW AGENT"}
+                  </motion.p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </motion.div>
       ) : (
