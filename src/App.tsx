@@ -105,6 +105,14 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('moneyflow_data');
     return saved ? JSON.parse(saved) : [];
   });
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Calculate totals at the top to avoid initialization issues
   const totalIn = transactions.filter(tx => tx.type === 'income').reduce((s, tx) => s + tx.amount, 0);
@@ -323,7 +331,116 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="container" style={{ padding: '2rem 1.5rem', maxWidth: '900px' }}>
+    <AnimatePresence mode="wait">
+      {showSplash ? (
+        <motion.div
+          key="splash"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, scale: 1.1, filter: "blur(10px)" }}
+          transition={{ duration: 0.8 }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--background)',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Animated Background Pulse */}
+          <motion.div
+            animate={{
+              scale: [1, 1.5, 1],
+              opacity: [0.3, 0.6, 0.3],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+            style={{
+              position: 'absolute',
+              width: '400px',
+              height: '400px',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, var(--primary) 0%, transparent 70%)',
+              filter: 'blur(40px)',
+              zIndex: -1
+            }}
+          />
+          <motion.div
+            animate={{
+              scale: [1.2, 1.8, 1.2],
+              opacity: [0.2, 0.4, 0.2],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: 0.5
+            }}
+            style={{
+              position: 'absolute',
+              width: '500px',
+              height: '500px',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, var(--secondary) 0%, transparent 70%)',
+              filter: 'blur(60px)',
+              zIndex: -1
+            }}
+          />
+
+          {/* Animated Ripples/Waves (Dada animasi) */}
+          <div className="splash-wave" style={{ width: '200px', height: '200px', animationDelay: '0s' }} />
+          <div className="splash-wave" style={{ width: '200px', height: '200px', animationDelay: '1s' }} />
+          <div className="splash-wave" style={{ width: '200px', height: '200px', animationDelay: '2s' }} />
+
+          <motion.div style={{ textAlign: 'center', zIndex: 1 }}>
+            <motion.h1
+              initial={{ y: 20, opacity: 0, letterSpacing: "10px" }}
+              animate={{ y: 0, opacity: 1, letterSpacing: "2px" }}
+              transition={{ 
+                duration: 0.8, 
+                ease: "easeOut",
+                delay: 0.2
+              }}
+              className="shimmer-text"
+              style={{
+                fontSize: '5rem',
+                fontWeight: '900',
+                margin: 0,
+                textTransform: 'uppercase'
+              }}
+            >
+              HALLO
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+              style={{
+                color: 'var(--text-muted)',
+                marginTop: '1rem',
+                fontSize: '1rem',
+                letterSpacing: '2px'
+              }}
+            >
+              RESEARCH-FLOW AGENT
+            </motion.p>
+          </motion.div>
+        </motion.div>
+      ) : (
+        <motion.div 
+          key="content"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="container" 
+          style={{ padding: '2rem 1.5rem', maxWidth: '900px' }}
+        >
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
            <div style={{ background: 'var(--primary)', padding: '0.5rem', borderRadius: '12px', boxShadow: '0 8px 16px rgba(139, 92, 246, 0.4)' }}><Wallet color="white" size={24} /></div>
@@ -469,7 +586,9 @@ const App: React.FC = () => {
       <footer style={{ marginTop: '5rem', textAlign: 'center', padding: '2.5rem 0', borderTop: '1px solid var(--card-border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
          <p>&copy; 2026 MoneyFlow Agent • Professional Accounting Node v3.1 [BUILD_FIX_V3]</p>
       </footer>
-    </div>
+    </motion.div>
+    )}
+    </AnimatePresence>
   );
 };
 
